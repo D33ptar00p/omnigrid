@@ -6,7 +6,9 @@ node_modules/
 dist/
 *.part
 .playwright-mcp/
+# Working screenshots from browser testing, but not the README image.
 *.png
+!docs/*.png
 __pycache__/
 *.pyc
 .pytest_cache/
