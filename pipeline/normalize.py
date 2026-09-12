@@ -13,9 +13,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pipeline import manifest as mf
-from pipeline.provenance import collect_source_ids
+from pipeline.provenance import collect_source_ids, derived
+from pipeline.model import supply
 from pipeline.schema import Asset, Fuel
-from pipeline.sources import wri
+from pipeline.sources import ember, regions, wri
 from pipeline.sources.fetch import MissingVendoredInput, fetch
 from pipeline.sources.registry import Registry, load
 
@@ -38,6 +39,9 @@ class BuildReport:
     skipped: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     degraded: bool = False
+    generation_twh: float = 0.0
+    calibration: dict[str, object] = field(default_factory=dict)
+    by_region: dict[str, int] = field(default_factory=dict)
 
     def summarise(self, assets: list[Asset]) -> None:
         self.assets = len(assets)
@@ -76,6 +80,66 @@ def load_assets(reg: Registry, bm: mf.BuildManifest, report: BuildReport) -> lis
     return assets
 
 
+def enrich(assets: list[Asset], reg, bm: mf.BuildManifest, report: BuildReport) -> None:
+    """Attach the two things the map needs beyond the raw inventory: which
+    synchronous grid each asset sits in, and what it actually generates."""
+    got = fetch(reg["ember_yearly"])
+    bm.record_input("ember_yearly", got.path)
+    year = supply.WRI_REFERENCE_YEAR if report.degraded else None
+    em = ember.read(got.path, year=year)
+    cal = supply.calibrate(assets, em, year=year)
+
+    index = regions.load()
+    bm.record_use(regions.SOURCE_ID)
+
+    for a in assets:
+        region_id, approximate = index.assign(a.country, a.lat, a.lon)
+        a.extra["region"] = derived(
+            index.label(region_id), "regions.assign", regions.SOURCE_ID)
+        if approximate:
+            # Surfaced so the UI can desaturate what rests on a geographic rule
+            # rather than a real boundary.
+            a.extra["region_approximate"] = derived(
+                True, "regions.geographic_rule", regions.SOURCE_ID)
+        a.extra["region_id"] = derived(region_id, "regions.assign", regions.SOURCE_ID)
+
+        # Our calibrated estimate becomes primary; whatever the source reported
+        # is kept alongside it so the two can be compared rather than merged.
+        if (reported := a.generation_gwh) is not None:
+            a.extra["generation_reported_gwh"] = reported
+        if (est := supply.annual_generation(a, cal)) is not None:
+            a.generation_gwh = est
+            report.generation_twh += est.value / 1000
+
+        cf, defaulted = cal.factor(a.country, a.fuel.value)
+        if defaulted:
+            a.extra["capacity_factor_assumed"] = derived(
+                round(cf, 3), "supply.default_capacity_factor", "ember_yearly")
+
+    for a in assets:
+        r = str(a.extra["region"].value)
+        report.by_region[r] = report.by_region.get(r, 0) + 1
+
+    report.calibration = {
+        "year": cal.year,
+        "pairs": len(cal.cf),
+        "coverage": round(cal.coverage, 3),
+        "clamp_rate": round(cal.clamp_rate, 3),
+        "worst_divergences": [
+            {"country": c, "modelled_gwh": round(m), "reported_gwh": round(r),
+             "divergence": round(d, 3)}
+            for c, m, r, d in cal.worst_divergences(15)
+        ],
+    }
+    if cal.clamp_rate > 0.15:
+        report.warnings.append(
+            f"CAPACITY FACTORS: {cal.clamp_rate:.0%} of country/fuel pairs produced a "
+            "physically implausible capacity factor and were clamped. The capacity "
+            "inventory and reported generation disagree; figures resting on those "
+            "pairs are weak."
+        )
+
+
 def to_geojson(assets: list[Asset]) -> dict:
     """Points for the map. Citations ride along per feature so the detail panel can
     show, per field, which dataset said it and whether it is measured or estimated."""
@@ -107,6 +171,7 @@ def run(dist: Path = DIST) -> BuildReport:
     report = BuildReport()
 
     assets = load_assets(reg, bm, report)
+    enrich(assets, reg, bm, report)
     report.summarise(assets)
 
     # --- provenance gate: nothing ships that cannot be traced -----------------
@@ -120,6 +185,7 @@ def run(dist: Path = DIST) -> BuildReport:
 
     bm.warnings = report.warnings
     bm.model_params = {"degraded": report.degraded}
+    bm.validation = {"calibration": report.calibration}
     bm.write(reg, dist)
     mf.write_attribution(reg, bm.used)
 
@@ -140,9 +206,16 @@ if __name__ == "__main__":
         print(f"\nBUILD FAILED\n{e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n{r.assets:,} assets  ·  {r.capacity_gw:,.0f} GW")
+    print(f"\n{r.assets:,} assets  ·  {r.capacity_gw:,.0f} GW  ·  "
+          f"{r.generation_twh:,.0f} TWh/yr modelled")
     for f, n in sorted(r.by_fuel.items(), key=lambda x: -x[1]):
         print(f"  {f:12} {n:7,}")
+    c = r.calibration
+    print(f"\ncalibration {c['year']}: {c['pairs']} country/fuel pairs, "
+          f"{c['coverage']:.0%} from reported data, {c['clamp_rate']:.0%} clamped")
+    print("\ntop regions:")
+    for name, n in sorted(r.by_region.items(), key=lambda x: -x[1])[:6]:
+        print(f"  {name:34} {n:6,}")
     if r.skipped:
         print("\nskipped:", dict(r.skipped))
     for w in r.warnings:

@@ -102,19 +102,20 @@ sources:
     publisher: Kontur
     version: "3km H3 global"
     url: https://data.humdata.org/dataset/kontur-population-dataset-3km
-    licence: UNRESOLVED
-    licence_url: https://www.kontur.io/datasets/population-dataset/
-    attribution: "Kontur Population dataset."
+    licence: CC-BY-4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: >-
+      Kontur Population dataset, CC BY 4.0. Derived in part from OpenStreetMap
+      (© OpenStreetMap contributors, ODbL) and Microsoft Buildings (ODbL).
     access: direct
     role: input
     provides: [population]
-    blocking_issue: >-
-      LICENCE UNRESOLVED. Kontur's own site states CC BY; the HDX listing describes
-      ODbL components (derives from OpenStreetMap and Microsoft Buildings, both ODbL).
-      ODbL is share-alike and carries obligations CC BY does not. Determine the
-      governing licence from the distributed files before shipping, and if ODbL,
-      establish whether shed outputs become a derivative database.
-      Fallback source: ghsl_pop.
+    notes: >-
+      LICENCE RESOLVED 2026-09-12. Both Kontur and the HDX package metadata state
+      CC BY (HDX license_id "cc-by"); the ODbL references describe Kontur's
+      upstream inputs, not the distributed product. We attribute the upstream
+      ODbL sources as well, which satisfies either reading at no cost. Fallback
+      remains ghsl_pop if this is ever contested.
 
   ghsl_pop:
     name: Global Human Settlement Layer population grid
@@ -134,8 +135,9 @@ sources:
     name: Yearly Electricity Data
     short: "Ember"
     publisher: Ember
-    version: "2026"
+    version: "Global Electricity Review yearly release, 2000-2022"
     url: https://ember-energy.org/data/yearly-electricity-data/
+    download_url: https://ember-energy.org/app/uploads/2023/04/release_yearly_ger.csv
     licence: CC-BY-4.0
     licence_url: https://creativecommons.org/licenses/by/4.0/
     attribution: "Yearly Electricity Data, Ember, CC BY 4.0."

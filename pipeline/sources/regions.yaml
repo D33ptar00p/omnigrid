@@ -1,0 +1,226 @@
+# Synchronous grid regions.
+#
+# The allocation model solves independently per region: this is how "a GB plant
+# cannot serve French demand" is enforced -- as a block-diagonal decomposition,
+# not a penalty term.
+#
+# There is no canonical open dataset for this, so it is authored. Each entry
+# carries its own source. Entries marked `approximate: true` use a geographic
+# rule rather than real boundaries and are flagged in the UI's confidence layer.
+#
+# Countries absent from `members` fall back to a region of their own, named
+# "iso:<ISO3>" -- an isolated national grid. That default is deliberately
+# conservative: it under-connects rather than inventing links that do not exist.
+
+schema_version: 1
+
+regions:
+
+  # ---- Europe -------------------------------------------------------------
+  continental_europe:
+    name: Continental Europe
+    source: "ENTSO-E synchronous area Continental Europe"
+    members: [ALB, AUT, BIH, BEL, BGR, HRV, CZE, DNK, FRA, MKD, DEU, GRC, HUN,
+              ITA, XKX, LUX, MNE, NLD, POL, PRT, ROU, SRB, SVK, SVN, ESP, CHE,
+              TUR, UKR, MDA, EST, LVA, LTU, DZA, MAR, TUN, LBY]
+    notes: >-
+      Ukraine and Moldova synchronised March 2022; the Baltic states left the
+      Russian IPS/UPS and joined Continental Europe in February 2025. Denmark is
+      split in reality (DK1 continental, DK2 Nordic) -- assigned wholly here,
+      which is the larger half.
+
+  nordic:
+    name: Nordic
+    source: "ENTSO-E synchronous area Nordic"
+    members: [NOR, SWE, FIN]
+
+  great_britain:
+    name: Great Britain
+    source: "National Grid ESO; linked to neighbours by HVDC only"
+    members: [GBR]
+    notes: "Northern Ireland is part of the all-island Irish system, not GB."
+
+  ireland:
+    name: All-island Ireland
+    source: "EirGrid / SONI all-island system"
+    members: [IRL]
+
+  iceland:
+    name: Iceland
+    source: "Landsnet; fully isolated"
+    members: [ISL]
+
+  # ---- former Soviet ------------------------------------------------------
+  ips_ups:
+    name: IPS/UPS
+    source: "Integrated/Unified Power System of Russia and neighbours"
+    members: [RUS, BLR, KAZ, KGZ, TJK, UZB, TKM, AZE, GEO, ARM, MNG]
+    approximate: true
+    notes: >-
+      Russia's eastern UPS zones and several Central Asian systems are only
+      weakly coupled. Treated as one region, which over-connects.
+
+  # ---- Asia ---------------------------------------------------------------
+  india:
+    name: Indian National Grid
+    source: "POSOCO; all five regional grids synchronised since 2013"
+    members: [IND, BTN, NPL, BGD]
+    notes: "Bangladesh and Nepal are HVDC/radial-linked; grouped for tractability."
+
+  china_grids:
+    name: China regional grids
+    source: "State Grid Corporation of China; China Southern Power Grid"
+    members: [CHN]
+    split: china
+    approximate: true
+    notes: >-
+      Six asynchronous regional grids (North, Northeast, Northwest, Central,
+      East, Southern) joined by HVDC. Split geographically -- this is the
+      weakest curation in the table and the UI marks it low-confidence.
+
+  japan_east:
+    name: Japan 50 Hz (east)
+    source: "OCCTO; Hokkaido, Tohoku and Tokyo areas"
+    members: [JPN]
+    split: japan_east
+    approximate: true
+
+  japan_west:
+    name: Japan 60 Hz (west)
+    source: "OCCTO; Chubu westward"
+    members: []
+    split: japan_west
+    approximate: true
+    notes: "The 50/60 Hz divide runs through Honshu; frequency converters only."
+
+  korea:
+    name: Korea
+    source: "KPX; isolated peninsula system"
+    members: [KOR, PRK]
+
+  asean_mainland:
+    name: Mainland Southeast Asia
+    source: "GMS interconnections (Thailand, Laos, Cambodia, Vietnam, Myanmar)"
+    members: [THA, LAO, KHM, VNM, MMR, MYS, SGP]
+    approximate: true
+
+  gcc:
+    name: GCC Interconnection
+    source: "GCC Interconnection Authority"
+    members: [SAU, ARE, KWT, QAT, BHR, OMN]
+
+  levant:
+    name: Levant / Eight-Country Interconnection
+    source: "EIJLLPST interconnection"
+    members: [JOR, SYR, LBN, IRQ, EGY, PSE, ISR]
+    approximate: true
+
+  # ---- Americas -----------------------------------------------------------
+  eastern_interconnection:
+    name: Eastern Interconnection
+    source: "NERC; eastern US and central/eastern Canada"
+    members: []
+    split: na_east
+    approximate: true
+
+  western_interconnection:
+    name: Western Interconnection
+    source: "NERC/WECC; western US, Alberta and British Columbia"
+    members: []
+    split: na_west
+    approximate: true
+
+  ercot:
+    name: ERCOT
+    source: "NERC; most of Texas, asynchronous from both interconnections"
+    members: []
+    split: ercot
+    approximate: true
+
+  quebec:
+    name: Québec Interconnection
+    source: "Hydro-Québec; asynchronous, HVDC ties only"
+    members: []
+    split: quebec
+    approximate: true
+
+  north_america:
+    name: North America
+    source: "NERC"
+    members: [USA, CAN]
+    split: na_parent
+    notes: "Parent entry: US and Canadian assets are routed to the four regions above."
+
+  mexico_sen:
+    name: Mexico SEN
+    source: "CENACE Sistema Eléctrico Nacional"
+    members: [MEX]
+
+  central_america:
+    name: SIEPAC
+    source: "EPR/SIEPAC regional interconnection"
+    members: [GTM, SLV, HND, NIC, CRI, PAN, BLZ]
+
+  brazil_sin:
+    name: Brazil SIN
+    source: "ONS Sistema Interligado Nacional"
+    members: [BRA, PRY, URY]
+    notes: "Isolated Amazon systems exist within Brazil; not separated here."
+
+  southern_cone:
+    name: Southern Cone
+    source: "SADI (Argentina) and SIC/SING (Chile)"
+    members: [ARG, CHL, BOL]
+    approximate: true
+
+  andean:
+    name: Andean
+    source: "CAN interconnections (Colombia, Ecuador, Peru, Venezuela)"
+    members: [COL, ECU, PER, VEN]
+    approximate: true
+
+  # ---- Africa / Oceania ---------------------------------------------------
+  southern_africa:
+    name: Southern African Power Pool
+    source: "SAPP"
+    members: [ZAF, ZWE, ZMB, BWA, NAM, MOZ, LSO, SWZ, COD, MWI, TZA, AGO]
+    approximate: true
+
+  west_africa:
+    name: West African Power Pool
+    source: "WAPP"
+    members: [NGA, GHA, CIV, BEN, TGO, BFA, NER, MLI, SEN, GIN, SLE, LBR,
+              GMB, GNB, MRT]
+    approximate: true
+
+  east_africa:
+    name: Eastern Africa Power Pool
+    source: "EAPP"
+    members: [ETH, KEN, UGA, RWA, BDI, SDN, SSD, DJI, SOM, ERI]
+    approximate: true
+
+  australia_nem:
+    name: National Electricity Market
+    source: "AEMO NEM; eastern and southern Australia"
+    members: []
+    split: nem
+    approximate: true
+
+  australia_swis:
+    name: South West Interconnected System
+    source: "AEMO SWIS; Western Australia"
+    members: []
+    split: swis
+    approximate: true
+
+  australia:
+    name: Australia
+    source: "AEMO"
+    members: [AUS]
+    split: au_parent
+    notes: "Parent entry: Australian assets are routed to NEM or SWIS."
+
+  new_zealand:
+    name: New Zealand
+    source: "Transpower; North and South Islands linked by the HVDC Inter-Island link"
+    members: [NZL]

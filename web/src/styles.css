@@ -140,6 +140,14 @@ html, body {
 .kind.derived  { background: #2a3350; color: #9db0e8; border: 1px dashed #45527f; }
 .kind.modelled { background: #3d2b46; color: #d9a6e8; border: 1px dotted #6a4878; }
 
+#panel .p-warn {
+  margin-top: 14px; padding: 9px 11px; font-size: 11.5px; line-height: 1.45;
+  background: #2e2415; border-left: 2px solid #8a6a2a;
+  border-radius: 0 6px 6px 0; color: #dcc79a;
+}
+#panel .p-warn p { margin: 0 0 6px; }
+#panel .p-warn p:last-child { margin-bottom: 0; }
+
 #panel .p-note {
   margin-top: 18px; padding: 10px 12px; font-size: 11.5px;
   background: #1a2030; border-left: 2px solid var(--line);
