@@ -27,6 +27,10 @@ export interface SourceMeta {
   attribution: string;
   role: string;
   citation: string;
+  /** When our local copy was last written. */
+  fetched?: string | null;
+  /** The date the data itself describes, when it differs from `fetched`. */
+  data_date?: string | null;
   caveat?: string;
 }
 

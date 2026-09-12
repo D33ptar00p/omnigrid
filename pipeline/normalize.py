@@ -120,6 +120,7 @@ def run(dist: Path = DIST) -> BuildReport:
     if (RAW / "wikidata" / "images.json").exists():
         bm.record_input("wikidata", RAW / "wikidata" / "images.json")
     settlement_date, period = gb_src.recent_settlement_period()
+    bm.record_data_date("elexon_b1610", f"{settlement_date}, settlement period {period}")
     gb_report = gb_build.build(RAW, dist / "gb",
                                settlement=f"{settlement_date} period {period}")
     report.gb = {

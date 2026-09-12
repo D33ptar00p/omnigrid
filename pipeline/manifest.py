@@ -28,6 +28,13 @@ class BuildManifest:
     schema_version: int = 1
     used: set[str] = field(default_factory=set)
     checksums: dict[str, str] = field(default_factory=dict)
+    #: source_id -> ISO date the local copy was last written. For a live API
+    #: this is when we fetched it; for a vendored file, when it was placed.
+    #: Distinct from the dataset's own release version, which the registry holds.
+    fetched: dict[str, str] = field(default_factory=dict)
+    #: source_id -> the date the *data itself* refers to, where that differs
+    #: from when we fetched it (a settlement date, a survey date).
+    data_dates: dict[str, str] = field(default_factory=dict)
     model_params: dict[str, Any] = field(default_factory=dict)
     validation: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
@@ -36,9 +43,15 @@ class BuildManifest:
         self.used.update(source_ids)
 
     def record_input(self, source_id: str, path: Path) -> None:
-        """Checksum a raw input so a silent upstream change cannot pass unnoticed."""
+        """Checksum a raw input so a silent upstream change cannot pass unnoticed,
+        and record when this copy of it was last written."""
         self.record_use(source_id)
         self.checksums[f"{source_id}:{path.name}"] = sha256(path)
+        self.fetched[source_id] = date.fromtimestamp(path.stat().st_mtime).isoformat()
+
+    def record_data_date(self, source_id: str, when: str) -> None:
+        """The date the data describes, when that is not the date we fetched it."""
+        self.data_dates[source_id] = when
 
     def to_json(self, reg: Registry) -> dict[str, Any]:
         sources = reg.resolve(self.used)
@@ -61,6 +74,8 @@ class BuildManifest:
                     "attribution": s.attribution,
                     "role": s.role,
                     "citation": s.citation(accessed=self.built),
+                    "fetched": self.fetched.get(s.id),
+                    "data_date": self.data_dates.get(s.id),
                     **({"caveat": s.notes} if s.notes else {}),
                 }
                 for s in sources

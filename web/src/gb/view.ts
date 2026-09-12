@@ -185,6 +185,22 @@ export function showTrace(map: maplibregl.Map, hops: Map<number, number> | null)
   }
 }
 
+/** Region fill and outline together: they are one layer conceptually. */
+export function setRegionsVisible(map: maplibregl.Map, visible: boolean): void {
+  const v = visible ? "visible" : "none";
+  for (const id of [REGION_FILL, REGION_LINE]) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", v);
+  }
+}
+
+/** The base network. The trace overlay stays visible either way, so a station's
+ *  connections can still be seen without the whole grid drawn behind them. */
+export function setLinesVisible(map: maplibregl.Map, visible: boolean): void {
+  if (map.getLayer(LINE_LAYER)) {
+    map.setLayoutProperty(LINE_LAYER, "visibility", visible ? "visible" : "none");
+  }
+}
+
 export function setVisible(map: maplibregl.Map, visible: boolean): void {
   const v = visible ? "visible" : "none";
   for (const id of [REGION_FILL, REGION_LINE, LINE_LAYER, TRACE_LAYER, PLANT_LAYER]) {

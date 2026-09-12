@@ -3,7 +3,7 @@
  * claim a dataset the build did not use, or omit one it did.
  */
 
-import type { Sources } from "../lib/provenance";
+import type { SourceMeta, Sources } from "../lib/provenance";
 
 const panel = document.getElementById("about") as HTMLElement;
 const toggle = document.getElementById("about-toggle") as HTMLButtonElement;
@@ -14,6 +14,21 @@ const ROLE_HEADINGS: [string, string][] = [
   ["validation", "Held out for validation"],
   ["basemap", "Basemap"],
 ];
+
+/**
+ * When this source was last refreshed.
+ *
+ * Two different dates, kept apart on purpose: `fetched` is when our copy was
+ * written, `data_date` is the moment the data itself describes. For metered
+ * generation those differ by days — B1610 is settlement data and lags real time
+ * — and conflating them would imply the map is live when it is not.
+ */
+function dateline(s: SourceMeta): string {
+  const bits: string[] = [];
+  if (s.data_date) bits.push(`Data for ${s.data_date}`);
+  if (s.fetched) bits.push(`${s.data_date ? "fetched" : "Fetched"} ${s.fetched}`);
+  return bits.length ? `<div class="src-date">${bits.join(" · ")}</div>` : "";
+}
 
 export function init(sources: Sources): void {
   const { manifest } = sources;
@@ -29,19 +44,28 @@ export function init(sources: Sources): void {
           <a href="${s.licence_url}" target="_blank" rel="noopener">${s.licence}</a> ·
           <a href="${s.url}" target="_blank" rel="noopener">source</a>
         </div>
+        ${dateline(s)}
         ${s.caveat ? `<div class="src-caveat">${s.caveat}</div>` : ""}
       </div>`).join("");
   }).join("");
 
   panel.innerHTML = `
     <h2>Where this data comes from</h2>
-    <p class="sub">Build ${manifest.built}. Every figure on the map is traceable to
-      one of these. Values are marked <em>measured</em>, <em>derived</em> or
-      <em>modelled</em> so an estimate never reads as a measurement.</p>
+    <p class="sub">Every figure on the map is traceable to one of these, and each
+      value shows which one it came from. Nothing here is modelled.</p>
+    <div class="build-line">
+      <span>Last built</span><b>${manifest.built}</b>
+    </div>
     ${groups}`;
 
-  toggle.addEventListener("click", () => { panel.hidden = !panel.hidden; });
+  toggle.addEventListener("click", () => {
+    panel.hidden = !panel.hidden;
+    toggle.classList.toggle("on", !panel.hidden);
+  });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") panel.hidden = true;
+    if (e.key === "Escape") {
+      panel.hidden = true;
+      toggle.classList.remove("on");
+    }
   });
 }

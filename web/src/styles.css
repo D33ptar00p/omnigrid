@@ -160,14 +160,30 @@ html, body {
 }
 
 /* --- operator filter ------------------------------------------------------ */
+#layers {
+  position: absolute; top: 126px; left: 16px; z-index: 6; width: 232px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 9px; padding: 9px 11px; backdrop-filter: blur(10px);
+}
+#layers > label {
+  display: block; font-size: 10.5px; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--ink-dim); margin-bottom: 6px;
+}
+#layers ul { list-style: none; margin: 0; padding: 0; }
+#layers li label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; padding: 3px 0; cursor: pointer; color: var(--ink-dim);
+}
+#layers li label:hover { color: var(--ink); }
+#layers input { accent-color: var(--accent); cursor: pointer; }
+
 #statusfilter, #opfilter {
   position: absolute; left: 16px; z-index: 6; width: 232px;
   background: var(--panel); border: 1px solid var(--line);
   border-radius: 9px; padding: 9px 11px; backdrop-filter: blur(10px);
 }
 #statusfilter { top: 126px; }
-#opfilter { top: 126px; }
-#statusfilter:not([hidden]) ~ #opfilter { top: 214px; }
+#opfilter { top: 232px; }
 #opfilter label, #statusfilter label {
   display: block; font-size: 10.5px; letter-spacing: .07em;
   text-transform: uppercase; color: var(--ink-dim); margin-bottom: 5px;
@@ -340,15 +356,18 @@ html, body {
 
 /* --- about / sources ------------------------------------------------------ */
 #about-toggle {
-  position: absolute; right: 16px; bottom: 16px; z-index: 5;
-  background: var(--panel); border: 1px solid var(--line); color: var(--ink-dim);
-  border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 12px;
+  position: absolute; right: 16px; top: 16px; z-index: 7;
+  display: flex; align-items: center; gap: 6px;
+  background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+  border-radius: 8px; padding: 8px 13px; font: inherit; font-size: 12.5px;
   cursor: pointer; backdrop-filter: blur(10px);
 }
-#about-toggle:hover { color: var(--ink); border-color: #35455c; }
+#about-toggle::before { content: "◆"; color: var(--accent); font-size: 9px; }
+#about-toggle:hover { border-color: var(--accent); }
+#about-toggle.on { border-color: var(--accent); background: #1b2836; }
 
 #about {
-  position: absolute; right: 16px; bottom: 58px; z-index: 6;
+  position: absolute; right: 16px; top: 58px; z-index: 6;
   width: min(420px, calc(100vw - 32px)); max-height: 70vh; overflow-y: auto;
   background: var(--panel-solid); border: 1px solid var(--line);
   border-radius: 10px; padding: 16px 18px; box-shadow: 0 12px 40px #0009;
@@ -362,6 +381,17 @@ html, body {
 #about .src { padding: 7px 0; border-top: 1px solid var(--line); font-size: 12px; }
 #about .src-name { font-weight: 600; }
 #about .src-meta { color: var(--ink-dim); font-size: 11px; margin-top: 1px; }
+#about .src-date {
+  color: var(--accent); font-size: 10.5px; margin-top: 2px; opacity: .85;
+}
+#about .build-line {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 7px 10px; margin-bottom: 12px; border-radius: 6px;
+  background: #17202e; border: 1px solid #27354a;
+  font-size: 11px; color: var(--ink-dim);
+}
+#about .build-line b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
 #about .src-caveat {
   color: #d8b878; font-size: 11px; margin-top: 3px; font-style: italic;
 }

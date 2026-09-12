@@ -86,6 +86,7 @@ async function boot() {
   wireGb(sources);
   wireOperatorFilter();
   wireStatusFilter();
+  wireLayerToggles();
   wireLegendToggle();
   wireViewToggle();
 }
@@ -132,6 +133,30 @@ function wireOperatorFilter(): void {
   });
 }
 
+/**
+ * Layer toggles for the GB view.
+ *
+ * Distribution regions are off by default. They shade the whole country, which
+ * is useful when you are asking about regions and in the way when you are not —
+ * and being always-on made the plants harder to read, which is the thing most
+ * people are here for.
+ */
+function wireLayerToggles(): void {
+  const regions = document.getElementById("layer-regions") as HTMLInputElement;
+  const lines = document.getElementById("layer-lines") as HTMLInputElement;
+
+  const apply = () => {
+    gbView.setRegionsVisible(map, regions.checked && view === "gb");
+    gbView.setLinesVisible(map, lines.checked && view === "gb");
+  };
+  regions.addEventListener("change", apply);
+  lines.addEventListener("change", apply);
+  applyLayerToggles = apply;
+  apply();
+}
+
+let applyLayerToggles: () => void = () => {};
+
 /** Status filter, World tab only: the GB plant data has no status field. */
 function wireStatusFilter(): void {
   const select = document.getElementById("status-select") as HTMLSelectElement;
@@ -154,6 +179,39 @@ function wireStatusFilter(): void {
     describe();
   });
   describe();
+}
+
+/**
+ * Warn when a filter hides every feature in a loaded source.
+ *
+ * A filter referencing a property the data does not have matches nothing and
+ * empties the layer in silence — which is exactly how the status filter, valid
+ * only for the World data, blanked the default Great Britain view. Rendering
+ * nothing is almost never what a filter is meant to do, so say so loudly in dev
+ * rather than leaving an empty map to be noticed by eye.
+ */
+function warnIfFilterBlanksLayer(): void {
+  if (!import.meta.env.DEV) return;
+  setTimeout(() => {
+    const layers: [string, string][] = [
+      [LAYER, SRC],
+      [gbView.PLANT_LAYER, gbView.PLANT_SRC],
+    ];
+    for (const [layer, source] of layers) {
+      if (!map.getLayer(layer)) continue;
+      if (map.getLayoutProperty(layer, "visibility") === "none") continue;
+      if (!map.isSourceLoaded(source)) continue;
+      const available = map.querySourceFeatures(source).length;
+      const shown = map.queryRenderedFeatures({ layers: [layer] }).length;
+      if (available > 0 && shown === 0) {
+        console.error(
+          `[omnigrid] ${layer} renders nothing though ${source} has ${available} ` +
+          `features. Filter: ${JSON.stringify(map.getFilter(layer))}. A filter ` +
+          "on a property this source lacks matches nothing.",
+        );
+      }
+    }
+  }, 700);
 }
 
 function escapeHtml(s: string): string {
@@ -193,6 +251,7 @@ function setView(next: View): void {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", global ? "visible" : "none");
   }
   gbView.setVisible(map, !global);
+  applyLayerToggles();
 
   document.querySelectorAll("#views button").forEach((b) => {
     b.classList.toggle("on", (b as HTMLElement).dataset.view === next);
@@ -201,6 +260,7 @@ function setView(next: View): void {
   (document.getElementById("legend-gb") as HTMLElement).hidden = global;
   (document.getElementById("opfilter") as HTMLElement).hidden = global;
   (document.getElementById("statusfilter") as HTMLElement).hidden = !global;
+  (document.getElementById("layers") as HTMLElement).hidden = global;
   renderBannerFor(next);
   (document.getElementById("view-note") as HTMLElement).textContent = global
     ? "Every power source on Earth, from open data."
@@ -372,27 +432,38 @@ function renderLegend() {
 }
 
 /**
- * Apply the fuel and operator selections together.
+ * Apply every active selection, per layer.
  *
- * Both used to call setFilter on the same layer, so each silently wiped the
- * other. They are combined here so the two controls compose.
+ * The controls compose — they used to call setFilter on the same layer and wipe
+ * each other — but they are not all applicable to both layers. Only the World
+ * data carries a project status, and only the GB data carries an operator, so
+ * each layer gets the clauses that exist in its own properties. Applying the
+ * status clause to GB matched nothing at all and blanked the default view.
  */
 function applyFilter() {
-  const clauses: unknown[] = [];
-  if (selectedFuel) clauses.push(["==", ["get", "_fuel"], selectedFuel]);
-  if (selectedOperator) clauses.push(["==", ["get", "_operator"], selectedOperator]);
-  if (selectedStatus) {
-    clauses.push(["in", ["get", "_status"], ["literal", selectedStatus]]);
-  }
+  const fuelClause = selectedFuel
+    ? ["==", ["get", "_fuel"], selectedFuel] : null;
 
-  const expr = clauses.length
-    ? (clauses.length === 1 ? clauses[0] : ["all", ...clauses])
-    : null;
-  for (const id of [LAYER, gbView.PLANT_LAYER]) {
-    if (map.getLayer(id)) {
-      map.setFilter(id, expr as maplibregl.FilterSpecification | null);
-    }
+  const worldClauses = [
+    fuelClause,
+    selectedStatus ? ["in", ["get", "_status"], ["literal", selectedStatus]] : null,
+  ].filter(Boolean);
+
+  const gbClauses = [
+    fuelClause,
+    selectedOperator ? ["==", ["get", "_operator"], selectedOperator] : null,
+  ].filter(Boolean);
+
+  const combine = (clauses: unknown[]) =>
+    (clauses.length === 0 ? null
+      : clauses.length === 1 ? clauses[0]
+      : ["all", ...clauses]) as maplibregl.FilterSpecification | null;
+
+  if (map.getLayer(LAYER)) map.setFilter(LAYER, combine(worldClauses));
+  if (map.getLayer(gbView.PLANT_LAYER)) {
+    map.setFilter(gbView.PLANT_LAYER, combine(gbClauses));
   }
+  warnIfFilterBlanksLayer();
   const note = document.getElementById("fuel-note") as HTMLElement;
   note.textContent = selectedFuel
     ? `Showing ${FUEL_LABEL[selectedFuel]} only — click again to clear.`
