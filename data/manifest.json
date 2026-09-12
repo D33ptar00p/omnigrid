@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "built": "2026-09-12",
+  "model": {
+    "degraded": false
+  },
+  "validation": {
+    "gb": {
+      "plants": 4613,
+      "gb_plants": 3376,
+      "offshore_capacity_gw": 24.1,
+      "plants_capacity_gw": 106.3,
+      "units_transmission": 504,
+      "units_embedded": 626,
+      "interconnectors": 10,
+      "regions": 14,
+      "matched": 85,
+      "with_image": 169,
+      "lines": 19850,
+      "plants_wired": 1335,
+      "operator_linked": 401,
+      "offshore": 50,
+      "metered_gw": 28.2,
+      "settlement": "2026-09-04 period 20"
+    }
+  },
+  "warnings": [
+    {
+      "scope": "gb",
+      "text": "1,335 of 3,376 GB plants have a power line terminating within 1 km. A line that merely passes overhead is not a connection, so proximity alone no longer counts \u2014 that rule had a 2.3 MW sewage works reading as connected at 400 kV."
+    },
+    {
+      "scope": "gb",
+      "text": "Tracing follows surveyed wires, which is a real question with a real answer. It is not a claim about where the electricity goes. Nearly every connected plant reaches ~92% of the network, so that figure is stated rather than drawn: painting it would show a 5 MW solar farm and Drax as identical."
+    },
+    {
+      "scope": "gb",
+      "text": "85 of 3,376 GB plants matched to an Elexon BM Unit by exact normalised name. Unmatched plants still show their surveyed location, fuel and capacity; they simply have no metered output attached."
+    },
+    {
+      "scope": "gb",
+      "text": "504 transmission-connected units have no distribution region, because they feed the GB national grid. That is physics, not missing data."
+    },
+    {
+      "scope": "gb",
+      "text": "50 offshore plants (24.1 GW) sit outside every DNO licence area, because those cover onshore distribution. They are on the GB transmission system and are counted as GB. An earlier query missed them entirely: it used the UK land boundary, so every wind farm beyond territorial waters fell outside it."
+    },
+    {
+      "scope": "gb",
+      "text": "1237 plants in the map's bounds are on another grid \u2014 Northern Ireland's all-island Irish system, or Ireland, France, Belgium and Norway. They are shown dimmed and excluded from GB totals."
+    },
+    {
+      "scope": "gb",
+      "text": "Elexon declares no fuel type for 25.0 GW of the 31.1 GW of embedded capacity. Regions are therefore shaded by capacity, not by fuel: colouring by the declared minority would present a third of the data as if it were all of it."
+    }
+  ],
+  "sources": [
+    {
+      "id": "elexon_b1610",
+      "name": "Actual Generation Output Per Generation Unit (B1610)",
+      "short": "Elexon",
+      "publisher": "Elexon",
+      "version": "Insights Solution API",
+      "url": "https://bmrs.elexon.co.uk/api-documentation/endpoint/datasets/B1610",
+      "licence": "elexon-bmrs",
+      "licence_url": "https://www.elexon.co.uk/bsc/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/",
+      "attribution": "Contains BMRS data \u00a9 Elexon Limited copyright and database right 2026.",
+      "role": "input",
+      "citation": "Contains BMRS data \u00a9 Elexon Limited copyright and database right 2026. Version Insights Solution API. Licence: elexon-bmrs <https://www.elexon.co.uk/bsc/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/>. <https://bmrs.elexon.co.uk/api-documentation/endpoint/datasets/B1610> Accessed 2026-09-12.",
+      "fetched": "2026-09-12",
+      "data_date": "2026-09-04, settlement period 20",
+      "caveat": "Settlement-grade metered output per generating unit, half-hourly. This is measured electricity, not an estimate: it is the volume the unit is actually settled on."
+    },
+    {
+      "id": "elexon_bmu",
+      "name": "BM Unit reference data",
+      "short": "Elexon",
+      "publisher": "Elexon",
+      "version": "Insights Solution API",
+      "url": "https://bmrs.elexon.co.uk/api-documentation/endpoint/reference/bmunits/all",
+      "licence": "elexon-bmrs",
+      "licence_url": "https://www.elexon.co.uk/bsc/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/",
+      "attribution": "Contains BMRS data \u00a9 Elexon Limited copyright and database right 2026.",
+      "role": "input",
+      "citation": "Contains BMRS data \u00a9 Elexon Limited copyright and database right 2026. Version Insights Solution API. Licence: elexon-bmrs <https://www.elexon.co.uk/bsc/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/>. <https://bmrs.elexon.co.uk/api-documentation/endpoint/reference/bmunits/all> Accessed 2026-09-12.",
+      "fetched": "2026-09-12",
+      "data_date": null,
+      "caveat": "3,071 Balancing Mechanism Units, 1,682 with generation capacity. Carries gspGroupId, the published link from an embedded generator to the distribution region it feeds. No API key required. Worldwide royalty-free perpetual licence with a mandatory attribution string."
+    },
+    {
+      "id": "gem_gipt",
+      "name": "Global Integrated Power Tracker",
+      "short": "GEM",
+      "publisher": "Global Energy Monitor",
+      "version": "August 2026 release",
+      "url": "https://globalenergymonitor.org/projects/global-integrated-power-tracker/",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Global Integrated Power Tracker, Global Energy Monitor, August 2026 release.",
+      "role": "input",
+      "citation": "Global Integrated Power Tracker, Global Energy Monitor, August 2026 release. Licence: CC-BY-4.0 <https://creativecommons.org/licenses/by/4.0/>. <https://globalenergymonitor.org/projects/global-integrated-power-tracker/> Accessed 2026-09-12.",
+      "fetched": "2026-09-12",
+      "data_date": null,
+      "caveat": "182,400 facilities, 22,296 GW, 200 countries. Unit-level; units are clustered into plants during normalisation. Download requires a name/email form, so the file is vendored into data/raw/gem/ and checksummed."
+    },
+    {
+      "id": "neso_dno_areas",
+      "name": "GIS Boundaries for GB DNO Licence Areas",
+      "short": "NESO",
+      "publisher": "National Energy System Operator",
+      "version": "20240503",
+      "url": "https://www.neso.energy/data-portal/gis-boundaries-gb-dno-license-areas",
+      "licence": "NESO-open-data",
+      "licence_url": "https://www.neso.energy/data-portal/neso-open-licence",
+      "attribution": "GIS Boundaries for GB DNO Licence Areas, National Energy System Operator, NESO Open Data Licence.",
+      "role": "input",
+      "citation": "GIS Boundaries for GB DNO Licence Areas, National Energy System Operator, NESO Open Data Licence. Version 20240503. Licence: NESO-open-data <https://www.neso.energy/data-portal/neso-open-licence>. <https://www.neso.energy/data-portal/gis-boundaries-gb-dno-license-areas> Accessed 2026-09-12.",
+      "fetched": "2026-09-12",
+      "data_date": null,
+      "caveat": "The 14 licensed Distribution Network Operator areas, EPSG:27700. NESO publishes these as approximate: originally shared by Western Power Distribution, somewhat outdated, a good indication of geography rather than a surveyed boundary. Their Name field (_A, _B, ...) matches Elexon's gspGroupId, which is what makes the generator-to-region link published fact rather than inference."
+    },
+    {
+      "id": "osm_gb_power",
+      "name": "OpenStreetMap GB power infrastructure",
+      "short": "OSM",
+      "publisher": "OpenStreetMap contributors",
+      "version": "live Overpass query",
+      "url": "https://wiki.openstreetmap.org/wiki/Power_networks",
+      "licence": "ODbL-1.0",
+      "licence_url": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "attribution": "\u00a9 OpenStreetMap contributors, ODbL.",
+      "role": "input",
+      "citation": "\u00a9 OpenStreetMap contributors, ODbL. Version live Overpass query. Licence: ODbL-1.0 <https://opendatacommons.org/licenses/odbl/1-0/>. <https://wiki.openstreetmap.org/wiki/Power_networks> Accessed 2026-09-12.",
+      "fetched": "2026-09-12",
+      "data_date": null,
+      "caveat": "Surveyed locations for GB power plants, transmission lines and substations. Queried by bounding box (49N-61.5N, 11.5W-3.5E) rather than by the UK admin area: the admin boundary is the land boundary, so an area query silently dropped every offshore wind farm beyond territorial waters, including Hornsea and Dogger Bank. The box also reaches France and Ireland, whose plants are classified out downstream. Matching an OSM plant to an Elexon BM Unit is a record link made by name, not a published identifier, and is marked as such per plant."
+    },
+    {
+      "id": "wikidata",
+      "name": "Wikidata and Wikimedia Commons",
+      "short": "Wikidata",
+      "publisher": "Wikimedia Foundation",
+      "version": "live API",
+      "url": "https://www.wikidata.org/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attribution": "Structured data from Wikidata (CC0). Photographs from Wikimedia Commons, each under its own licence, credited to its author.",
+      "role": "input",
+      "citation": "Structured data from Wikidata (CC0). Photographs from Wikimedia Commons, each under its own licence, credited to its author. Version live API. Licence: CC0-1.0 <https://creativecommons.org/publicdomain/zero/1.0/>. <https://www.wikidata.org/> Accessed 2026-09-12.",
+      "fetched": "2026-09-12",
+      "data_date": null,
+      "caveat": "OpenStreetMap records a wikidata id for 451 GB plants; 169 of those have a photograph (property P18) on Wikimedia Commons. Wikidata's own structured data is CC0, but each photograph is licensed by its photographer -- usually CC BY or CC BY-SA -- so the author and licence are fetched with the image and shown beside it."
+    }
+  ],
+  "checksums": {
+    "gem_gipt:Global Integrated Power August 2026-v3.xlsx": "432757ffdcae7ffd204258b064a46a0483f10b07dbf66c5ae0b2434d83fabe87",
+    "elexon_bmu:bmunits.json": "2ec3f7f5cccf953199bc9b8bc7f21451387e201fa439aa49b7de33818305f24c",
+    "elexon_b1610:b1610.json": "82b86dad54055f000fd52b98bb74c14f05ecec5f2021a9972db9132399979c73",
+    "neso_dno_areas:dno_areas.geojson": "871d0b42c05fef95e2f3d4db2393be969489fbca45079bf83d96d160643ca5c2",
+    "osm_gb_power:plants.json": "d65dfd9f0da535af42d28a81c4b0d33d7e9375e70e9fd6d230e526a7b1c9ba42",
+    "wikidata:images.json": "97a3d15069609070370db5686a6003a65d0ebd0f84d6a0da5248167c5aa00d93"
+  }
+}
