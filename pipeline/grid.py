@@ -31,10 +31,10 @@ SNAP_DEGREES = 1e-5  # ~1 m
 #: what "reach from a power station" is usually asking about.
 TRANSMISSION_VOLTS = 132_000
 
-#: A plant connects to any line whose vertex falls within this radius. Plants are
-#: mapped as areas and their switchyard is usually inside the polygon, so this is
-#: generous enough to catch the connection without inventing one.
-CONNECT_KM = 2.0
+#: A plant connects to a line that *terminates* within this radius. Tighter than
+#: the old any-vertex rule because an endpoint is a real electrical termination,
+#: not a circuit that happens to cross the site.
+CONNECT_KM = 1.0
 
 
 def _max_voltage(raw: str | None) -> int | None:
@@ -235,15 +235,31 @@ def connections_for(graph: GridGraph, lon: float, lat: float,
 
 def connections_bulk(graph: GridGraph, points: list[tuple[float, float]],
                      radius_km: float = CONNECT_KM) -> list[list[int]]:
-    """`connections_for` over many points, via a spatial index.
+    """Lines that *terminate* near each point: its grid connections.
 
-    The linear scan is fine for one plant and hopeless for several thousand.
+    Matching any vertex within the radius was wrong. It counted every line that
+    merely passes overhead, which produced physically impossible results — a
+    2.3 MW sewage works reading as connected at 400 kV because a supergrid
+    circuit crosses the site. A connection terminates at a plant; a line passing
+    over it does not, so only endpoints count.
+
+    With that fixed, connection voltage becomes a real signal rather than noise:
+    the median rises monotonically from 132 kV for sub-10 MW plants to 400 kV
+    above 1 GW, which is how the grid is actually built.
     """
     from shapely import STRtree
-    from shapely.geometry import LineString, Point
+    from shapely.geometry import Point
 
-    geoms = [LineString(line.geometry) for line in graph.lines]
-    tree = STRtree(geoms)
+    endpoints = []
+    owner: list[int] = []
+    for idx, line in enumerate(graph.lines):
+        for lon, lat in (line.geometry[0], line.geometry[-1]):
+            endpoints.append(Point(lon, lat))
+            owner.append(idx)
+    if not endpoints:
+        return [[] for _ in points]
+    tree = STRtree(endpoints)
+
     # Degrees are not kilometres, but at GB latitudes a degree of longitude is
     # ~65 km and of latitude ~111 km; the smaller is the safe conversion for a
     # search radius that must not miss anything.
@@ -251,16 +267,81 @@ def connections_bulk(graph: GridGraph, points: list[tuple[float, float]],
 
     out: list[list[int]] = []
     for lon, lat in points:
-        point = Point(lon, lat)
         hits: list[tuple[float, int]] = []
-        for idx in tree.query(point.buffer(radius_deg)):
-            line = graph.lines[int(idx)]
-            best = min(_haversine_km(lon, lat, plon, plat)
-                       for plon, plat in line.geometry)
-            if best <= radius_km:
-                hits.append((best, int(idx)))
+        for j in tree.query(Point(lon, lat).buffer(radius_deg)):
+            j = int(j)
+            d = _haversine_km(lon, lat, endpoints[j].x, endpoints[j].y)
+            if d <= radius_km:
+                hits.append((d, owner[j]))
         hits.sort()
-        out.append([i for _, i in hits])
+        seen: set[int] = set()
+        nearest: list[int] = []
+        for _, idx in hits:
+            if idx not in seen:
+                seen.add(idx)
+                nearest.append(idx)
+        out.append(nearest)
+    return out
+
+
+def reach_for(graph: GridGraph, roots: list[int]) -> dict[str, Any]:
+    """What a plant is wired to: its connection, and how far that network goes.
+
+    The share is deliberately a *number* rather than something drawn. It is ~92%
+    for almost every connected plant in GB, so rendering it paints an identical
+    picture for a 5 MW solar farm and for Drax — the same answer to every
+    question, which is no answer at all. Said as a figure it still makes the
+    point, and the map is freed to show the connection, which genuinely differs.
+    """
+    if not roots:
+        return {"lines": 0, "voltage": None, "component": 0, "share": 0.0}
+    volts = [graph.lines[i].voltage for i in roots if graph.lines[i].voltage]
+    component = len(graph.component_of(roots[0]))
+    return {
+        "lines": len(roots),
+        "voltage": max(volts) if volts else None,
+        "component": component,
+        "share": round(component / len(graph.lines), 4) if graph.lines else 0.0,
+    }
+
+
+def subset_geojson(graph: GridGraph, keep: set[int]) -> dict[str, Any]:
+    """Geometry for a chosen subset of lines, renumbered to a dense index.
+
+    The full all-voltage network is 24 MB of geometry. Connections and reach are
+    computed across all of it, but only the lines actually drawn are shipped:
+    transmission, plus every line that is some plant's connection.
+    """
+    order = sorted(keep)
+    remap = {old: new for new, old in enumerate(order)}
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "id": remap[old],
+                "geometry": {"type": "LineString", "coordinates": graph.lines[old].geometry},
+                "properties": {
+                    "i": remap[old],
+                    "osm_id": graph.lines[old].id,
+                    "voltage": graph.lines[old].voltage,
+                    "name": graph.lines[old].name,
+                },
+            }
+            for old in order
+        ],
+    }, remap
+
+
+def subset_adjacency(graph: GridGraph, remap: dict[int, int]) -> dict[str, list[int]]:
+    """Adjacency restricted to the shipped lines, renumbered to match."""
+    out: dict[str, list[int]] = {}
+    for old, neighbours in graph.adjacency.items():
+        if old not in remap:
+            continue
+        near = sorted(remap[n] for n in neighbours if n in remap)
+        if near:
+            out[str(remap[old])] = near
     return out
 
 

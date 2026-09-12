@@ -278,3 +278,59 @@ def test_company_key_identifies_a_firm_across_naming_variants():
     assert company_key("RWE Generation UK plc") == "rwe"
     assert company_key("TotalEnergies Gas & Power Ltd") == "totalenergies"
     assert company_key("Power Ltd") is None
+
+
+def test_connections_require_a_line_to_terminate_not_merely_pass_by():
+    """Proximity is not connection.
+
+    Matching any vertex within range counted circuits that merely cross a site,
+    which had a 2.3 MW sewage works reading as connected at 400 kV. Only a line
+    that terminates near the plant is a connection.
+    """
+    from pipeline.grid import Line, GridGraph, connections_bulk
+
+    # A line passing 100 m from the plant, but terminating far away.
+    passing = Line(id=1, voltage=400_000, name="passing",
+                   geometry=[(-1.0, 53.0), (0.0, 53.001), (1.0, 53.0)])
+    # A line terminating right at it.
+    terminating = Line(id=2, voltage=33_000, name="terminating",
+                       geometry=[(0.0005, 53.0005), (0.5, 53.5)])
+    graph = GridGraph(lines=[passing, terminating])
+
+    found = connections_bulk(graph, [(0.0, 53.0)], radius_km=1.0)[0]
+    assert 1 in found, "a line terminating at the plant is a connection"
+    assert 0 not in found, "a line passing overhead is not a connection"
+
+
+def test_connection_voltage_rises_with_plant_size():
+    """The signal that makes the map worth looking at.
+
+    Small generators connect at distribution voltage and large ones at
+    transmission voltage. If this inverts or flattens, connections are being
+    matched to the wrong lines again.
+    """
+    import json
+    import statistics
+
+    dist = Path(__file__).resolve().parent.parent / "data" / "dist" / "gb"
+    if not (dist / "reach.json").exists():
+        pytest.skip("GB build artefacts not present")
+
+    reach = json.loads((dist / "reach.json").read_text())
+    plants = {
+        f["properties"]["id"]: f["properties"]
+        for f in json.loads((dist / "plants.geojson").read_text())["features"]
+    }
+
+    small, large = [], []
+    for pid, info in reach.items():
+        p, kv = plants.get(pid), info.get("voltage")
+        if not p or not kv or not p.get("_mw"):
+            continue
+        (small if p["_mw"] < 10 else large).append(kv)
+
+    assert small and large
+    assert statistics.median(large) > statistics.median(small), (
+        f"median {statistics.median(large)/1000:.0f} kV for >=10 MW vs "
+        f"{statistics.median(small)/1000:.0f} kV for <10 MW"
+    )

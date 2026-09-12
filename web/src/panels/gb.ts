@@ -215,7 +215,7 @@ export function showRegion(props: RegionProps, sources: Sources): void {
   el.querySelector(".close")?.addEventListener("click", hide);
 }
 
-import type { Trace } from "../gb/trace";
+import { MAX_HOPS, type Trace } from "../gb/trace";
 
 /**
  * Report what this station is physically wired to.
@@ -224,41 +224,47 @@ import type { Trace } from "../gb/trace";
  * transmission network, which is why asking "which area does Drax supply" has
  * no answer. Saying so plainly beats drawing a boundary that implies one.
  */
-export function setTrace(trace: Trace | null): void {
+export function setTrace(trace: Trace | null, onHops?: (hops: number) => void): void {
   const box = document.getElementById("trace-box");
   if (!box) return;
 
   if (!trace) {
     box.innerHTML = `<div class="trace-title">Grid connection</div>
-      <p>No mapped transmission line within 2 km. Most small embedded generators
-      connect at distribution voltage, which OpenStreetMap maps less completely.</p>`;
+      <p>No power line terminates within 1 km. A line passing overhead is not a
+      connection, so proximity alone does not count. Most small generators
+      connect at low voltage, which OpenStreetMap maps less completely.</p>`;
     return;
   }
 
-  const share = trace.componentSize / trace.totalLines;
-  const byHop = new Map<number, number>();
-  for (const h of trace.hops.values()) byHop.set(h, (byHop.get(h) ?? 0) + 1);
-  const maxHop = Math.max(...byHop.keys());
+  const kv = trace.voltage ? `${(trace.voltage / 1000).toFixed(0)} kV` : "—";
+  const drawn = trace.hops.size;
 
   box.innerHTML = `
     <div class="trace-title">Grid connection
       <span class="kind measured" title="Traced through surveyed OpenStreetMap geometry.">surveyed</span>
     </div>
     <div class="trace-stats">
+      <div><div class="trace-num">${kv}</div>
+        <div class="trace-cap">connection voltage</div></div>
       <div><div class="trace-num">${trace.roots.length}</div>
-        <div class="trace-cap">lines at the station</div></div>
-      <div><div class="trace-num">${(share * 100).toFixed(0)}%</div>
-        <div class="trace-cap">of the GB transmission network it is wired to</div></div>
+        <div class="trace-cap">line${trace.roots.length === 1 ? "" : "s"} terminating here</div></div>
     </div>
-    <div class="hopbar">${[...Array(maxHop + 1)].map((_, h) => {
-      const n = byHop.get(h) ?? 0;
-      return `<span style="flex:${Math.max(n, 1)}" title="${n} lines ${h} hops out"></span>`;
-    }).join("")}</div>
-    <div class="hopends"><span>at the station</span><span>${maxHop} hops out</span></div>
-    <p>Highlighted lines are those physically connected, up to ${maxHop} hops.
-    This is a question of wiring, with a real answer — not a claim about where the
-    electricity ends up. The GB network is one connected graph, which is exactly
-    why no station has a catchment area of its own.</p>`;
+
+    <label class="hopctl">
+      <span>Follow the wires <b>${trace.maxHops}</b> hop${trace.maxHops === 1 ? "" : "s"}
+        — ${drawn.toLocaleString()} lines shown</span>
+      <input type="range" id="hop-range" min="1" max="${MAX_HOPS}" value="${trace.maxHops}">
+    </label>
+
+    <p>Keep going and this reaches <b>${(trace.share * 100).toFixed(0)}%</b> of the
+    mapped network. That figure is nearly the same for every connected station in
+    Britain, which is why it is written rather than drawn: the grid is one
+    connected graph, so no station has a catchment area of its own. What differs
+    between stations is the connection itself — voltage and how many circuits —
+    so that is what the map shows.</p>`;
+
+  const range = box.querySelector("#hop-range") as HTMLInputElement | null;
+  range?.addEventListener("input", () => onHops?.(Number(range.value)));
 }
 
 export function hide(): void {

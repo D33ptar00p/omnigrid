@@ -8,9 +8,11 @@
  *
  * The trace answers "what is this station wired to", which is a question of
  * fact. It is not a claim about where the electricity goes. The GB transmission
- * network is a single connected graph — Drax reaches 92% of it — which is
- * precisely why a per-station catchment area does not exist. Showing the trace
- * by hop distance makes that visible instead of asserting it.
+ * network is a single connected graph — Drax reaches 54% of every mapped line
+ * in GB, and that share is much the same for any connected station — which is
+ * precisely why a per-station catchment area does not exist. The share is
+ * therefore reported as a figure, and the map draws the local connection, which
+ * is what actually differs between stations.
  */
 
 export interface Trace {
@@ -21,19 +23,46 @@ export interface Trace {
   /** lines reachable at any distance, i.e. its connected component */
   componentSize: number;
   totalLines: number;
+  /** highest voltage among the lines terminating at the station */
+  voltage: number | null;
+  /** share of the network reachable, as computed over the full all-voltage graph */
+  share: number;
+  maxHops: number;
 }
+
+export interface Reach {
+  lines: number;
+  voltage: number | null;
+  component: number;
+  share: number;
+}
+
+/**
+ * How far to walk by default.
+ *
+ * Three hops, not the whole component. Reach is ~92% of the network for nearly
+ * every connected plant in GB, so drawing the full component renders a 5 MW
+ * solar farm and Drax identically — the same picture for every input, which
+ * conveys nothing. The local connection is what actually differs, and the 92%
+ * is reported as a figure instead.
+ */
+export const DEFAULT_HOPS = 3;
+export const MAX_HOPS = 14;
 
 export class GridTracer {
   private adjacency = new Map<number, number[]>();
   private connections: Record<string, number[]> = {};
+  private reach: Record<string, Reach> = {};
   private componentCache = new Map<number, number>();
   ready = false;
 
   async init(base = "/data/gb"): Promise<void> {
-    const [adj, conns] = await Promise.all([
+    const [adj, conns, reach] = await Promise.all([
       fetch(`${base}/adjacency.json`).then((r) => r.json()),
       fetch(`${base}/connections.json`).then((r) => r.json()),
+      fetch(`${base}/reach.json`).then((r) => r.json()),
     ]);
+    this.reach = reach;
     for (const [k, v] of Object.entries(adj as Record<string, number[]>)) {
       this.adjacency.set(Number(k), v);
     }
@@ -50,7 +79,7 @@ export class GridTracer {
   }
 
   /** Breadth-first walk outward, capped so the picture stays legible. */
-  trace(plantId: string, maxHops = 12): Trace | null {
+  trace(plantId: string, maxHops = DEFAULT_HOPS): Trace | null {
     const roots = this.connections[plantId];
     if (!roots?.length) return null;
 
@@ -69,10 +98,16 @@ export class GridTracer {
         }
       }
     }
+    const reach = this.reach[plantId];
     return {
       hops, roots,
-      componentSize: this.componentSize(roots[0]!),
+      componentSize: reach?.component ?? this.componentSize(roots[0]!),
       totalLines: this.adjacency.size,
+      voltage: reach?.voltage ?? null,
+      // Share comes from the pipeline, measured over the full all-voltage
+      // graph rather than the subset shipped for drawing.
+      share: reach?.share ?? 0,
+      maxHops,
     };
   }
 

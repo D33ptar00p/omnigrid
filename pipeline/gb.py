@@ -579,33 +579,50 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
     if lines_path.exists():
         from pipeline import grid as grid_mod
 
+        # Built across every voltage, not transmission alone: a 5 MW solar farm
+        # connects at 33 kV, and a transmission-only graph either misses it or
+        # hands it a supergrid circuit that merely crosses the site.
         graph = grid_mod.build_graph(
-            lines_path, substations=raw / "osm_gb_power" / "substations.json")
+            lines_path, substations=raw / "osm_gb_power" / "substations.json",
+            transmission_only=False)
         conns = grid_mod.connections_bulk(
-            graph, [(p.lon, p.lat) for p in plants], radius_km=2.0)
+            graph, [(p.lon, p.lat) for p in plants], radius_km=1.0)
 
-        (dist / "lines.geojson").write_text(
-            json.dumps(grid_mod.to_geojson(graph), separators=(",", ":")))
-        (dist / "adjacency.json").write_text(
-            json.dumps(grid_mod.adjacency_json(graph), separators=(",", ":")))
+        reach = {plants[i].id: grid_mod.reach_for(graph, c)
+                 for i, c in enumerate(conns) if c}
+
+        # Ship only what is drawn: transmission, plus every line that is some
+        # plant's connection. The rest is 24 MB of distribution geometry that
+        # the map never shows.
+        keep = {i for i, line in enumerate(graph.lines) if line.is_transmission}
+        for c in conns:
+            keep.update(c)
+        geometry, remap = grid_mod.subset_geojson(graph, keep)
+
+        (dist / "lines.geojson").write_text(json.dumps(geometry, separators=(",", ":")))
+        (dist / "adjacency.json").write_text(json.dumps(
+            grid_mod.subset_adjacency(graph, remap), separators=(",", ":")))
         (dist / "connections.json").write_text(json.dumps(
-            {plants[i].id: c for i, c in enumerate(conns) if c},
+            {plants[i].id: [remap[x] for x in c if x in remap]
+             for i, c in enumerate(conns) if c},
             separators=(",", ":")))
+        (dist / "reach.json").write_text(json.dumps(reach, separators=(",", ":")))
 
-        report.lines = len(graph.lines)
+        report.lines = len(keep)
         report.substation_joins = graph.substation_joins
         report.plants_wired = sum(1 for c in conns if c)
         report.notes.append(
-            f"{report.plants_wired:,} of {report.gb_plants:,} GB plants sit within 2 km of a "
-            "mapped transmission line. The rest are embedded in distribution "
-            "networks that OpenStreetMap maps less completely, or are too small to "
-            "have a traced connection."
+            f"{report.plants_wired:,} of {report.gb_plants:,} GB plants have a power "
+            "line terminating within 1 km. A line that merely passes overhead is "
+            "not a connection, so proximity alone no longer counts — that rule had "
+            "a 2.3 MW sewage works reading as connected at 400 kV."
         )
         report.notes.append(
             "Tracing follows surveyed wires, which is a real question with a real "
-            "answer. It is not a claim about where the electricity goes: the GB "
-            "transmission network is one connected graph, so a full trace from "
-            "almost any station reaches most of the country."
+            "answer. It is not a claim about where the electricity goes. Nearly "
+            "every connected plant reaches ~92% of the network, so that figure is "
+            "stated rather than drawn: painting it would show a 5 MW solar farm "
+            "and Drax as identical."
         )
 
     report.plants = len(plants)

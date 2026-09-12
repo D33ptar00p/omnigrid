@@ -303,9 +303,7 @@ function wireGb(sources: Sources): void {
     const props = revive(f.properties as Record<string, unknown>);
     gbPanel.showPlant(props, sources);
 
-    const trace = tracer.ready ? tracer.trace(String(props.id)) : null;
-    gbView.showTrace(map, trace?.hops ?? null);
-    gbPanel.setTrace(trace);
+    showTraceFor(String(props.id));
   });
 
   map.on("click", gbView.REGION_FILL, (e) => {
@@ -333,6 +331,13 @@ function wireGb(sources: Sources): void {
     (document.getElementById("tooltip") as HTMLElement).hidden = true;
     map.getCanvas().style.cursor = "";
   });
+}
+
+/** Draw a station's grid connection, and let the reader follow it further out. */
+function showTraceFor(plantId: string, hops?: number): void {
+  const trace = tracer.ready ? tracer.trace(plantId, hops) : null;
+  gbView.showTrace(map, trace?.hops ?? null);
+  gbPanel.setTrace(trace, (next) => showTraceFor(plantId, next));
 }
 
 /** GeoJSON nests objects as JSON strings once they cross into MapLibre. */
