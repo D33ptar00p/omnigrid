@@ -114,7 +114,15 @@ html, body {
   border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 12px;
   cursor: pointer; backdrop-filter: blur(10px); white-space: nowrap;
 }
-#controls button:hover { color: var(--ink); border-color: #35455c; }
+#controls button:hover, #repo-link:hover { color: var(--ink); border-color: #35455c; }
+
+/* Matches the buttons beside it: this is a control, not a link in prose. */
+#repo-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--panel); border: 1px solid var(--line); color: var(--ink-dim);
+  border-radius: 8px; padding: 7px 12px; font-size: 12px; line-height: 1;
+  text-decoration: none; backdrop-filter: blur(10px); white-space: nowrap;
+}
 #controls button.on {
   color: var(--ink); border-color: var(--accent); background: #1b2836;
 }
