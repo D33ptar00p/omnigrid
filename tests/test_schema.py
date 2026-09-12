@@ -33,6 +33,20 @@ def test_unmapped_fuel_raises_rather_than_becoming_other():
         parse_fuel("Plasma Fusion Reactor")
 
 
+def test_multi_fuel_takes_the_primary_source():
+    """OpenStreetMap writes multi-fuel plants as "oil;gas". The first value is
+    the primary source by convention; inventing a blend would be worse."""
+    assert parse_fuel("oil;gas") is Fuel.OIL
+    assert parse_fuel("biomass;waste") is Fuel.BIOENERGY
+    assert parse_fuel("wind;solar") is Fuel.WIND
+
+
+def test_liquid_air_is_storage_not_generation():
+    from pipeline.schema import is_non_generating
+
+    assert is_non_generating("liquid_air")
+
+
 def test_empty_fuel_raises():
     for bad in (None, "", "   "):
         with pytest.raises(UnknownFuel):
@@ -52,9 +66,15 @@ def test_parsing_is_case_and_whitespace_insensitive():
 
 
 def test_only_explicit_values_reach_other():
-    """OTHER must be reachable only from source values that genuinely mean it."""
+    """OTHER must be reachable only from values that genuinely mean it.
+
+    The set is pinned so that adding a mapping to OTHER is a deliberate act.
+    `waste_heat` and `minewater` are real OpenStreetMap sources in GB that fit
+    none of the nine named categories; they belong in OTHER, unlike a fuel we
+    simply failed to map, which must raise.
+    """
     reaching = {k for k, v in FUEL_ALIASES.items() if v is Fuel.OTHER}
-    assert reaching == {"other", "unknown"}
+    assert reaching == {"other", "unknown", "waste_heat", "minewater"}
 
 
 def test_fossil_and_renewable_partition_is_sane():

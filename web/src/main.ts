@@ -101,6 +101,7 @@ function setView(next: View): void {
     b.classList.toggle("on", (b as HTMLElement).dataset.view === next);
   });
   document.getElementById("legend")!.hidden = false;
+  (document.getElementById("legend-gb") as HTMLElement).hidden = global;
   (document.getElementById("view-note") as HTMLElement).textContent = global
     ? "Every power source on Earth, from open data."
     : "Great Britain: metered output on the real distribution network.";

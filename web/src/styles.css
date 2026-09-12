@@ -129,6 +129,18 @@ html, body {
 #legend .fossil-rule {
   margin: 6px 0; border: 0; border-top: 1px dashed var(--line);
 }
+#legend-gb { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+#legend-gb h2 { margin-bottom: 6px; }
+.ramp {
+  height: 9px; border-radius: 5px;
+  background: linear-gradient(90deg, #16202e, #1d3446, #245061, #2c6b78, #3f9a97);
+  border: 1px solid var(--line);
+}
+.ramp-ends {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: var(--ink-faint); margin-top: 3px;
+}
+
 .legend-note {
   margin: 8px 0 0; font-size: 11px; color: var(--ink-faint);
 }
