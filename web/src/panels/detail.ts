@@ -58,10 +58,7 @@ export function show(props: Record<string, unknown>, sources: Sources): void {
     ${divergence(gen, get("generation_reported_gwh"))}
     ${caveats(get("region_approximate"), get("capacity_factor_assumed"))}
 
-    <div class="p-note">
-      Supply sheds — the area each plant is estimated to serve — are not in this
-      build yet. They arrive with the transport model.
-    </div>`;
+    <div id="shed-summary" class="shed-box">Loading supply shed…</div>`;
 
   el.hidden = false;
   el.querySelector(".close")?.addEventListener("click", hide);
@@ -95,6 +92,59 @@ function caveats(approxRegion: Cited | undefined, assumedCf: Cited | undefined):
   }
   if (!notes.length) return "";
   return `<div class="p-warn">${notes.map((n) => `<p>${n}</p>`).join("")}</div>`;
+}
+
+export interface ShedSummary {
+  cells: number;
+  populationServed: number;
+  populationReached: number;
+}
+
+/**
+ * Render the shed figures.
+ *
+ * Both population numbers are shown, labelled. Reporting only "people reached"
+ * is the single most likely way this project would mislead: it is a much bigger,
+ * much more quotable number, and it means something quite different from the
+ * demand-weighted figure.
+ */
+export function setShedSummary(summary: ShedSummary | null): void {
+  const box = document.getElementById("shed-summary");
+  if (!box) return;
+
+  if (!summary) {
+    box.innerHTML = `<div class="shed-title">No modelled supply shed</div>
+      <p>This plant's output could not be placed within its own synchronous grid
+      region — usually because it exports over links the model does not
+      represent, or sits far from any demand.</p>`;
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="shed-title">Modelled supply shed
+      <span class="kind modelled" title="${KIND_TITLE.modelled}">modelled</span>
+    </div>
+    <div class="shed-stats">
+      <div>
+        <div class="shed-num">${compact(summary.populationServed)}</div>
+        <div class="shed-cap">people served <em>(demand-weighted)</em></div>
+      </div>
+      <div>
+        <div class="shed-num">${compact(summary.populationReached)}</div>
+        <div class="shed-cap">people receiving <em>some</em> of its power</div>
+      </div>
+    </div>
+    <p>Spread across ${summary.cells.toLocaleString()} cells. Electrons are not
+    tracked: this is where this plant's annual output would go under a
+    distance-decay allocation constrained to match reported national generation
+    and demand. Intermittency, dispatch order and storage are not modelled.</p>`;
+}
+
+function compact(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}bn`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}k`;
+  return n.toFixed(0);
 }
 
 export function hide(): void {

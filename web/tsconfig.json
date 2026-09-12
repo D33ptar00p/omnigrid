@@ -8,7 +8,7 @@
     "noUnusedLocals": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "geojson"],
     "isolatedModules": true,
     "noEmit": true
   },

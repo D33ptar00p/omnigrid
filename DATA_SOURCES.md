@@ -21,6 +21,24 @@ Data that feeds the map and the supply-shed model.
 
 > Unmaintained since 2021. Used ONLY as a cross-check on modelled generation and as a degraded fallback when GEM files are not vendored. Never primary.
 
+### Kontur Population
+
+- **Publisher** — Kontur
+- **Version** — 3km H3 global
+- **Licence** — [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)
+- **Source** — <https://data.humdata.org/dataset/kontur-population-dataset-3km>
+- **Attribution** — Kontur Population dataset, CC BY 4.0. Derived in part from OpenStreetMap (© OpenStreetMap contributors, ODbL) and Microsoft Buildings (ODbL).
+
+> LICENCE RESOLVED 2026-09-12. Both Kontur and the HDX package metadata state CC BY (HDX license_id "cc-by"); the ODbL references describe Kontur's upstream inputs, not the distributed product. We attribute the upstream ODbL sources as well, which satisfies either reading at no cost. Fallback remains ghsl_pop if this is ever contested.
+
+### Natural Earth admin boundaries
+
+- **Publisher** — Natural Earth
+- **Version** — 5.1.1 (50m cultural)
+- **Licence** — [public-domain](https://www.naturalearthdata.com/about/terms-of-use/)
+- **Source** — <https://www.naturalearthdata.com/>
+- **Attribution** — Made with Natural Earth.
+
 ### Synchronous grid region table
 
 - **Publisher** — OmniGrid

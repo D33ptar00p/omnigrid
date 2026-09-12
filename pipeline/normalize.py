@@ -14,8 +14,9 @@ from pathlib import Path
 
 from pipeline import manifest as mf
 from pipeline.provenance import collect_source_ids, derived
-from pipeline.model import supply
+from pipeline.model import demand as demand_mod, shed as shed_mod, supply
 from pipeline.schema import Asset, Fuel
+from pipeline.pack import sheds as shed_packer
 from pipeline.sources import ember, regions, wri
 from pipeline.sources.fetch import MissingVendoredInput, fetch
 from pipeline.sources.registry import Registry, load
@@ -40,6 +41,7 @@ class BuildReport:
     warnings: list[str] = field(default_factory=list)
     degraded: bool = False
     generation_twh: float = 0.0
+    shed: dict[str, object] = field(default_factory=dict)
     calibration: dict[str, object] = field(default_factory=dict)
     by_region: dict[str, int] = field(default_factory=dict)
 
@@ -140,6 +142,75 @@ def enrich(assets: list[Asset], reg, bm: mf.BuildManifest, report: BuildReport) 
         )
 
 
+def build_sheds(assets: list[Asset], reg, bm: mf.BuildManifest, report: BuildReport,
+                dist: Path, *, resolution: int) -> None:
+    """Solve the allocation and pack a shed for every plant."""
+    import numpy as np
+
+    pop = fetch(reg["kontur_pop"])
+    bm.record_input("kontur_pop", pop.path)
+    bounds = fetch(reg["natural_earth"])
+    bm.record_input("natural_earth", bounds.path)
+    em = ember.read(fetch(reg["ember_yearly"]).path,
+                    year=supply.WRI_REFERENCE_YEAR if report.degraded else None)
+
+    index = regions.load()
+    surface = demand_mod.build(pop.path, bounds.path, em, index, resolution=resolution)
+
+    lat, lon, gwh, region, ids = [], [], [], [], []
+    for a in assets:
+        if a.generation_gwh is None or a.generation_gwh.value <= 0:
+            continue
+        rid, _ = index.assign(a.country, a.lat, a.lon)
+        lat.append(a.lat); lon.append(a.lon); gwh.append(a.generation_gwh.value)
+        region.append(rid); ids.append(a.id)
+
+    model = shed_mod.run(
+        surface, np.array(lat), np.array(lon), np.array(gwh),
+        np.array(region, dtype=object),
+    )
+    stats = shed_packer.write(
+        dist / "shed", surface.cells, ids,
+        model.shares_by_plant, model.shares_by_cell, model.transport, surface.population,
+    )
+
+    report.shed = {
+        "resolution": resolution,
+        "lambda_km": model.lambda_km,
+        "cells": len(surface),
+        "plants": len(ids),
+        "regions_solved": len(model.regions),
+        "unconverged": len(model.unconverged),
+        "demand_pwh": round(surface.total_demand_gwh / 1e6, 3),
+        "unplaced_twh": round(model.total_unplaced_gwh / 1000),
+        "unplaced_fraction": round(model.total_unplaced_gwh / max(sum(gwh), 1), 4),
+        "population_conservation": round(stats.population_conservation, 4),
+        "median_shed_cells": stats.median_shed_cells,
+        "largest_shed_cells": stats.largest_shed_cells,
+        "bytes": stats.bytes_sheds + stats.bytes_cells,
+        "exporting_regions": [
+            {"region": index.label(r.region_id), "balance": round(r.balance, 2),
+             "unplaced_twh": round(r.unplaced_gwh / 1000)}
+            for r in model.exporting_regions[:8]
+        ],
+    }
+    report.warnings.extend(surface.notes)
+    report.warnings.extend(model.notes[:3])
+    report.warnings.extend(stats.notes)
+    if model.unconverged:
+        report.warnings.append(
+            f"ALLOCATION: {len(model.unconverged)} region(s) hit the iteration cap "
+            "without converging; their marginals are approximate."
+        )
+    if model.total_unplaced_gwh > 0:
+        report.warnings.append(
+            f"EXPORTS NOT MODELLED: {model.total_unplaced_gwh / 1000:,.0f} TWh "
+            f"({model.total_unplaced_gwh / max(sum(gwh), 1):.0%}) of generation could not be "
+            "placed inside its own synchronous region. It concentrates in regions that "
+            "genuinely export over HVDC links this model does not represent."
+        )
+
+
 def to_geojson(assets: list[Asset]) -> dict:
     """Points for the map. Citations ride along per feature so the detail panel can
     show, per field, which dataset said it and whether it is measured or estimated."""
@@ -165,7 +236,7 @@ def to_geojson(assets: list[Asset]) -> dict:
     }
 
 
-def run(dist: Path = DIST) -> BuildReport:
+def run(dist: Path = DIST, *, resolution: int = 4, sheds: bool = True) -> BuildReport:
     reg = load()
     bm = mf.BuildManifest()
     report = BuildReport()
@@ -180,12 +251,19 @@ def run(dist: Path = DIST) -> BuildReport:
     if problems := mf.check(reg, bm.used):
         raise BuildFailed("provenance check failed:\n  - " + "\n  - ".join(problems))
 
+    if sheds:
+        build_sheds(assets, reg, bm, report, dist, resolution=resolution)
+        cited = collect_source_ids(assets) | bm.used
+        if problems := mf.check(reg, cited):
+            raise BuildFailed("provenance check failed:\n  - " + "\n  - ".join(problems))
+        bm.record_use(*cited)
+
     dist.mkdir(parents=True, exist_ok=True)
     (dist / "assets.geojson").write_text(json.dumps(to_geojson(assets), separators=(",", ":")))
 
     bm.warnings = report.warnings
     bm.model_params = {"degraded": report.degraded}
-    bm.validation = {"calibration": report.calibration}
+    bm.validation = {"calibration": report.calibration, "shed": report.shed}
     bm.write(reg, dist)
     mf.write_attribution(reg, bm.used)
 
@@ -198,10 +276,17 @@ def run(dist: Path = DIST) -> BuildReport:
 
 
 if __name__ == "__main__":
+    import argparse
     import sys
 
+    ap = argparse.ArgumentParser(description="Build the OmniGrid data payload.")
+    ap.add_argument("--resolution", type=int, default=4,
+                    help="H3 resolution for the demand surface (4 = dev loop, 6 = production)")
+    ap.add_argument("--no-sheds", action="store_true", help="skip the allocation model")
+    args = ap.parse_args()
+
     try:
-        r = run()
+        r = run(resolution=args.resolution, sheds=not args.no_sheds)
     except BuildFailed as e:
         print(f"\nBUILD FAILED\n{e}", file=sys.stderr)
         sys.exit(1)
@@ -218,6 +303,20 @@ if __name__ == "__main__":
         print(f"  {name:34} {n:6,}")
     if r.skipped:
         print("\nskipped:", dict(r.skipped))
+    if r.shed:
+        sh = r.shed
+        print(f"\nshed model: res {sh['resolution']}, lambda {sh['lambda_km']:.0f} km, "
+              f"{sh['cells']:,} cells x {sh['plants']:,} plants, "
+              f"{sh['regions_solved']} regions")
+        print(f"  median shed {sh['median_shed_cells']} cells, largest "
+              f"{sh['largest_shed_cells']:,}, {sh['bytes']/1e6:.1f} MB")
+        print(f"  population conservation: {sh['population_conservation']:.1%} "
+              "(per-plant served, summed, over world population)")
+        if sh["exporting_regions"]:
+            print("  net exporters (output stranded in-region):")
+            for e in sh["exporting_regions"][:4]:
+                print(f"    {e['region']:28} bal {e['balance']:5.2f}  "
+                      f"{e['unplaced_twh']:,} TWh")
     for w in r.warnings:
         print(f"\n!! {w}")
     print(f"\nwrote data/dist/  ({sum(p.stat().st_size for p in DIST.iterdir())/1e6:.1f} MB)")
