@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>OmniGrid — where the world's power comes from</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>⚡</text></svg>" />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <header id="brand">
+      <h1>OmniGrid</h1>
+      <p>Every power source on Earth, from open data.</p>
+    </header>
+
+    <div id="banner" hidden></div>
+
+    <aside id="legend">
+      <h2>Energy type</h2>
+      <ul id="legend-items"></ul>
+      <p class="legend-note">Circle size ∝ capacity</p>
+    </aside>
+
+    <aside id="panel" hidden></aside>
+    <div id="tooltip" hidden></div>
+
+    <button id="about-toggle" type="button">Sources</button>
+    <aside id="about" hidden></aside>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

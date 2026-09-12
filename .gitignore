@@ -1,0 +1,12 @@
+data/raw/
+data/interim/
+data/dist/
+.venv/
+node_modules/
+dist/
+*.part
+.playwright-mcp/
+*.png
+__pycache__/
+*.pyc
+.pytest_cache/

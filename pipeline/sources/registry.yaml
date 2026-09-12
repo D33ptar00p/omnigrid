@@ -1,0 +1,283 @@
+# OmniGrid source registry — the single source of truth for provenance.
+#
+# Nothing may enter the pipeline without an entry here. This file generates:
+#   - the in-app attribution panel        (data/dist/manifest.json)
+#   - the methodology page reference list
+#   - DATA_SOURCES.md
+# Build fails if any output field cites a source_id absent from this file, or if
+# any entry is missing `licence`, `attribution`, or `url`.
+#
+# `access`:  direct  = auto-downloadable by the pipeline
+#            form    = behind a name/email form; must be vendored by hand
+#            derived = authored by this project
+# `role`:    input      = feeds the model
+#            validation = deliberately held out to test the model
+#            basemap    = cartographic only
+
+schema_version: 1
+
+sources:
+
+  gem_gipt:
+    name: Global Integrated Power Tracker
+    short: "GEM"
+    publisher: Global Energy Monitor
+    version: "August 2026 release"
+    url: https://globalenergymonitor.org/projects/global-integrated-power-tracker/
+    download_url: https://globalenergymonitor.org/projects/global-integrated-power-tracker/download-data/
+    licence: CC-BY-4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: "Global Integrated Power Tracker, Global Energy Monitor, August 2026 release."
+    access: form
+    role: input
+    raw_glob: "gem/*Integrated*Power*.xlsx"
+    provides: [capacity_mw, fuel, status, owner, start_year, retired_year, location]
+    notes: >-
+      182,400 facilities, 22,296 GW, 200 countries. Unit-level; units are clustered
+      into plants during normalisation. Download requires a name/email form, so the
+      file is vendored into data/raw/gem/ and checksummed.
+
+  gem_goget:
+    name: Global Oil and Gas Extraction Tracker
+    short: "GEM"
+    publisher: Global Energy Monitor
+    version: "March 2026 release"
+    url: https://globalenergymonitor.org/projects/global-oil-gas-extraction-tracker/
+    licence: CC-BY-4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: "Global Oil and Gas Extraction Tracker, Global Energy Monitor, March 2026 release."
+    access: form
+    role: input
+    raw_glob: "gem/*Oil*Gas*Extraction*.xls*"
+    provides: [extraction_site, production, reserves, operator, location]
+
+  gem_gcmt:
+    name: Global Coal Mine Tracker
+    short: "GEM"
+    publisher: Global Energy Monitor
+    version: "2026 release"
+    url: https://globalenergymonitor.org/projects/global-coal-mine-tracker/
+    licence: CC-BY-4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: "Global Coal Mine Tracker, Global Energy Monitor, 2026 release."
+    access: form
+    role: input
+    raw_glob: "gem/*Coal*Mine*.xls*"
+    provides: [extraction_site, production, reserves, operator, location]
+
+  wri_gppd:
+    name: Global Power Plant Database
+    short: "WRI"
+    publisher: World Resources Institute
+    version: "1.3.0"
+    url: https://datasets.wri.org/datasets/global-power-plant-database
+    download_url: https://wri-dataportal-prod.s3.amazonaws.com/manual/global_power_plant_database_v_1_3.zip
+    licence: CC-BY-4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: "Global Power Plant Database v1.3.0, World Resources Institute."
+    access: direct
+    role: input
+    provides: [estimated_generation_gwh, capacity_mw, fuel]
+    notes: >-
+      Unmaintained since 2021. Used ONLY as a cross-check on modelled generation and
+      as a degraded fallback when GEM files are not vendored. Never primary.
+
+  osm_power:
+    name: OpenStreetMap power infrastructure
+    short: "OSM"
+    publisher: OpenStreetMap contributors
+    version: "planet, build date recorded at fetch"
+    url: https://www.openstreetmap.org/
+    licence: ODbL-1.0
+    licence_url: https://opendatacommons.org/licenses/odbl/1-0/
+    attribution: "© OpenStreetMap contributors, ODbL."
+    access: direct
+    role: input
+    provides: [plant_footprint, transmission_line, substation]
+    notes: "power=plant, power=generator, power=line, power=substation via Overpass/Geofabrik."
+
+  kontur_pop:
+    name: Kontur Population
+    short: "Kontur"
+    publisher: Kontur
+    version: "3km H3 global"
+    url: https://data.humdata.org/dataset/kontur-population-dataset-3km
+    licence: UNRESOLVED
+    licence_url: https://www.kontur.io/datasets/population-dataset/
+    attribution: "Kontur Population dataset."
+    access: direct
+    role: input
+    provides: [population]
+    blocking_issue: >-
+      LICENCE UNRESOLVED. Kontur's own site states CC BY; the HDX listing describes
+      ODbL components (derives from OpenStreetMap and Microsoft Buildings, both ODbL).
+      ODbL is share-alike and carries obligations CC BY does not. Determine the
+      governing licence from the distributed files before shipping, and if ODbL,
+      establish whether shed outputs become a derivative database.
+      Fallback source: ghsl_pop.
+
+  ghsl_pop:
+    name: Global Human Settlement Layer population grid
+    short: "GHSL"
+    publisher: European Commission Joint Research Centre
+    version: "R2023A"
+    url: https://human-settlement.emergency.copernicus.eu/ghs_pop.php
+    licence: CC-BY-4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: "GHSL Global Human Settlement Layer, European Commission JRC."
+    access: direct
+    role: input
+    provides: [population]
+    notes: "Fallback population source if kontur_pop's licence cannot be resolved cleanly."
+
+  ember_yearly:
+    name: Yearly Electricity Data
+    short: "Ember"
+    publisher: Ember
+    version: "2026"
+    url: https://ember-energy.org/data/yearly-electricity-data/
+    licence: CC-BY-4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: "Yearly Electricity Data, Ember, CC BY 4.0."
+    access: direct
+    role: input
+    provides: [national_generation_gwh, national_demand_gwh, capacity_mw, emissions, net_imports]
+    notes: >-
+      215 geographies. The calibration target for capacity factors — the single
+      biggest accuracy lever in the model.
+
+  gridfinder:
+    name: Derived map of global electricity transmission and distribution lines
+    short: "gridfinder"
+    publisher: World Bank / ESMAP
+    version: "Zenodo record 3628142"
+    url: https://energydata.info/dataset/derived-map-of-global-electricity-transmission-and-distribution-lines
+    download_url: https://zenodo.org/record/3628142/files/
+    licence: CC-BY-4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: "gridfinder, World Bank / ESMAP, CC BY 4.0."
+    access: direct
+    role: input
+    provides: [predicted_line, grid_reach, lv_density]
+    files: [grid.gpkg, targets.tif, lv.tif]
+    notes: >-
+      187 countries, ~70% accurate at 1 km. Feeds BOTH the cost matrix and the demand
+      mask, so its errors compound — always blended against worldbank_electrification.
+
+  worldbank_electrification:
+    name: Access to electricity (% of population)
+    short: "World Bank"
+    publisher: World Bank
+    version: "indicator EG.ELC.ACCS.ZS"
+    url: https://data.worldbank.org/indicator/EG.ELC.ACCS.ZS
+    licence: CC-BY-4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: "World Bank, Access to electricity (% of population), CC BY 4.0."
+    access: direct
+    role: input
+    provides: [electrification_rate]
+
+  natural_earth:
+    name: Natural Earth admin boundaries
+    short: "Natural Earth"
+    publisher: Natural Earth
+    version: "5.1.1"
+    url: https://www.naturalearthdata.com/
+    licence: public-domain
+    licence_url: https://www.naturalearthdata.com/about/terms-of-use/
+    attribution: "Made with Natural Earth."
+    access: direct
+    role: input
+    provides: [country_boundary]
+
+  omnigrid_regions:
+    name: Synchronous grid region table
+    short: "OmniGrid"
+    publisher: OmniGrid
+    version: "1"
+    url: https://github.com/omnigrid/omnigrid
+    licence: CC0-1.0
+    licence_url: https://creativecommons.org/publicdomain/zero/1.0/
+    attribution: "OmniGrid synchronous grid region table, CC0."
+    access: derived
+    role: input
+    provides: [synchronous_region, interconnector]
+    notes: >-
+      Authored. No canonical open dataset exists. ~40 major synchronous areas.
+      Each entry carries its own source citation. This is where the model silently
+      breaks if curation is wrong — China's six regional grids, Japan's 50/60 Hz
+      split, Russia's UPS zones, Brazil's isolated systems, Australia NEM/SWIS/NT.
+
+  protomaps_basemap:
+    name: Protomaps basemap
+    short: "Protomaps"
+    publisher: Protomaps
+    version: "daily planet build"
+    url: https://protomaps.com/
+    licence: ODbL-1.0
+    licence_url: https://opendatacommons.org/licenses/odbl/1-0/
+    attribution: "© OpenStreetMap contributors, ODbL. Basemap style © Protomaps (CC0)."
+    access: direct
+    role: basemap
+
+  omnigrid_model:
+    name: OmniGrid supply-shed model
+    short: "OmniGrid model"
+    publisher: OmniGrid
+    version: "1"
+    url: https://github.com/omnigrid/omnigrid
+    licence: CC-BY-4.0
+    licence_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: "OmniGrid modelled supply sheds, CC BY 4.0."
+    access: derived
+    role: model
+    provides: [shed, population_served, hex_carbon_intensity, effective_area, reach_r50]
+    notes: >-
+      Entropy-regularised optimal transport (doubly-constrained gravity model),
+      solved by unbalanced Sinkhorn per synchronous region. Every value citing this
+      source is an estimate, never a measurement. See the methodology page.
+
+  # ---- validation only: deliberately held out of the model ----
+
+  epa_egrid:
+    name: eGRID
+    short: "eGRID"
+    publisher: US Environmental Protection Agency
+    version: "2024"
+    url: https://www.epa.gov/egrid
+    licence: public-domain
+    licence_url: https://www.epa.gov/
+    attribution: "eGRID, US Environmental Protection Agency."
+    access: direct
+    role: validation
+    provides: [subregion_carbon_intensity]
+    notes: "Primary lambda fitting target. Never an input to the allocation."
+
+  entsoe:
+    name: ENTSO-E Transparency Platform
+    short: "ENTSO-E"
+    publisher: ENTSO-E
+    version: "current"
+    url: https://transparency.entsoe.eu/
+    licence: entsoe-terms
+    licence_url: https://transparency.entsoe.eu/content/static_content/Static%20content/terms%20and%20conditions/terms%20and%20conditions.html
+    attribution: "ENTSO-E Transparency Platform."
+    access: direct
+    role: validation
+    provides: [bidding_zone_mix]
+
+  hifld_territories:
+    name: Electric Retail Service Territories
+    short: "HIFLD"
+    publisher: HIFLD / US Department of Homeland Security
+    version: "archived 2025-08-26"
+    url: https://catalog.data.gov/dataset/electric-retail-service-territories
+    licence: public-domain
+    licence_url: https://www.usa.gov/government-works
+    attribution: "Electric Retail Service Territories, HIFLD."
+    access: direct
+    role: validation
+    provides: [utility_service_territory]
+    notes: >-
+      Real regulated US/CA polygons. Sanity check on shed extent only — never an
+      input. HIFLD Open was deactivated 2025-08-26; mirrored via Data Rescue Project.

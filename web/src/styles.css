@@ -1,0 +1,184 @@
+/* Dark, desaturated ground so the data is the subject. */
+:root {
+  --bg: #0b0e14;
+  --panel: #141922e6;
+  --panel-solid: #141922;
+  --line: #253041;
+  --ink: #e6edf7;
+  --ink-dim: #8c9ab0;
+  --ink-faint: #5d6a7e;
+  --accent: #56c6b9;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font); font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#map { position: absolute; inset: 0; }
+
+/* --- brand ---------------------------------------------------------------- */
+#brand {
+  position: absolute; top: 16px; left: 16px; z-index: 5;
+  pointer-events: none; max-width: 40vw;
+}
+#brand h1 {
+  margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.02em;
+  text-shadow: 0 1px 12px #0b0e14cc;
+}
+#brand p {
+  margin: 2px 0 0; font-size: 12px; color: var(--ink-dim);
+  text-shadow: 0 1px 12px #0b0e14cc;
+}
+
+/* --- degraded-build banner ------------------------------------------------ */
+#banner {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 8; max-width: min(680px, calc(100vw - 32px));
+  background: #3a2a12f2; border: 1px solid #7a5a20; border-radius: 8px;
+  padding: 8px 12px; font-size: 12px; color: #f0d9a8;
+  backdrop-filter: blur(8px);
+}
+#banner strong { color: #ffcf70; }
+
+/* --- legend --------------------------------------------------------------- */
+#legend {
+  position: absolute; left: 16px; bottom: 16px; z-index: 5;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; backdrop-filter: blur(10px); min-width: 168px;
+}
+#legend h2 {
+  margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-dim);
+}
+#legend ul { list-style: none; margin: 0; padding: 0; }
+#legend li {
+  display: flex; align-items: center; gap: 8px; padding: 2px 0;
+  font-size: 12.5px; cursor: pointer; user-select: none;
+  border-radius: 4px; transition: opacity .12s;
+}
+#legend li:hover { color: #fff; }
+#legend li.off { opacity: .32; }
+#legend .swatch {
+  width: 11px; height: 11px; border-radius: 50%; flex: none;
+  box-shadow: 0 0 0 1px #0006 inset;
+}
+#legend .fossil-rule {
+  margin: 6px 0; border: 0; border-top: 1px dashed var(--line);
+}
+.legend-note {
+  margin: 8px 0 0; font-size: 11px; color: var(--ink-faint);
+}
+
+/* --- tooltip -------------------------------------------------------------- */
+#tooltip {
+  position: absolute; z-index: 9; pointer-events: none;
+  background: var(--panel-solid); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 10px; font-size: 12.5px;
+  max-width: 260px; box-shadow: 0 6px 20px #0009;
+  transform: translate(-50%, calc(-100% - 12px));
+}
+#tooltip .t-name { font-weight: 600; margin-bottom: 2px; }
+#tooltip .t-meta { color: var(--ink-dim); font-size: 11.5px; }
+
+/* --- detail panel --------------------------------------------------------- */
+#panel {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: 7;
+  width: min(400px, 100vw); overflow-y: auto;
+  background: var(--panel-solid); border-left: 1px solid var(--line);
+  padding: 20px; box-shadow: -12px 0 40px #0007;
+  animation: slide-in .18s ease-out;
+}
+@keyframes slide-in { from { transform: translateX(24px); opacity: 0 } }
+
+#panel .close {
+  position: absolute; top: 14px; right: 14px;
+  background: none; border: 0; color: var(--ink-faint);
+  font-size: 22px; line-height: 1; cursor: pointer; padding: 4px;
+}
+#panel .close:hover { color: var(--ink); }
+
+#panel .p-fuel {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; margin-bottom: 6px;
+}
+#panel h2 {
+  margin: 0 0 2px; font-size: 19px; font-weight: 640;
+  letter-spacing: -0.015em; padding-right: 28px;
+}
+#panel .p-country { color: var(--ink-dim); font-size: 13px; margin: 0 0 18px; }
+
+/* Field rows. The citation sits inline, not behind a tooltip: the whole point
+   is that you can see where a number came from without hunting for it. */
+.field { padding: 10px 0; border-top: 1px solid var(--line); }
+.field-label {
+  font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-dim); margin-bottom: 2px;
+}
+.field-value { font-size: 16px; font-variant-numeric: tabular-nums; }
+.field-value.is-modelled { font-style: italic; color: #cdd9ea; }
+.cite {
+  margin-top: 3px; font-size: 11px; color: var(--ink-faint);
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+}
+.cite a { color: var(--ink-faint); text-decoration: underline dotted; }
+.cite a:hover { color: var(--accent); }
+
+/* Kind is carried by shape and text, never colour alone. */
+.kind {
+  font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase;
+  padding: 1px 5px; border-radius: 3px; font-weight: 600; flex: none;
+}
+.kind.measured { background: #1d3a2e; color: #7fd4a8; border: 1px solid #2c5a45; }
+.kind.derived  { background: #2a3350; color: #9db0e8; border: 1px dashed #45527f; }
+.kind.modelled { background: #3d2b46; color: #d9a6e8; border: 1px dotted #6a4878; }
+
+#panel .p-note {
+  margin-top: 18px; padding: 10px 12px; font-size: 11.5px;
+  background: #1a2030; border-left: 2px solid var(--line);
+  border-radius: 0 6px 6px 0; color: var(--ink-dim);
+}
+
+/* --- about / sources ------------------------------------------------------ */
+#about-toggle {
+  position: absolute; right: 16px; bottom: 16px; z-index: 5;
+  background: var(--panel); border: 1px solid var(--line); color: var(--ink-dim);
+  border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 12px;
+  cursor: pointer; backdrop-filter: blur(10px);
+}
+#about-toggle:hover { color: var(--ink); border-color: #35455c; }
+
+#about {
+  position: absolute; right: 16px; bottom: 58px; z-index: 6;
+  width: min(420px, calc(100vw - 32px)); max-height: 70vh; overflow-y: auto;
+  background: var(--panel-solid); border: 1px solid var(--line);
+  border-radius: 10px; padding: 16px 18px; box-shadow: 0 12px 40px #0009;
+}
+#about h2 { margin: 0 0 4px; font-size: 15px; }
+#about .sub { margin: 0 0 14px; font-size: 12px; color: var(--ink-dim); }
+#about h3 {
+  margin: 16px 0 6px; font-size: 10.5px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+#about .src { padding: 7px 0; border-top: 1px solid var(--line); font-size: 12px; }
+#about .src-name { font-weight: 600; }
+#about .src-meta { color: var(--ink-dim); font-size: 11px; margin-top: 1px; }
+#about .src-caveat {
+  color: #d8b878; font-size: 11px; margin-top: 3px; font-style: italic;
+}
+#about a { color: var(--accent); }
+
+.maplibregl-ctrl-attrib { font-size: 10px !important; }
+
+@media (max-width: 640px) {
+  #panel { width: 100vw; }
+  #brand { max-width: 60vw; }
+  #legend { transform: scale(.9); transform-origin: left bottom; }
+}

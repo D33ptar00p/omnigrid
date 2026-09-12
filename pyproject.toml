@@ -1,0 +1,33 @@
+[project]
+name = "omnigrid"
+version = "0.1.0"
+description = "An explorable world map of energy supply and its modelled supply sheds"
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0",
+    "polars>=1.0",
+    "numpy>=2.0",
+    "scipy>=1.14",
+    "h3>=4.1",
+    "requests>=2.32",
+    "openpyxl>=3.1",
+    "xlrd>=2.0",
+]
+
+[project.optional-dependencies]
+geo = ["rasterio>=1.3", "pyogrio>=0.9", "shapely>=2.0", "duckdb>=1.1"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pipeline"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
