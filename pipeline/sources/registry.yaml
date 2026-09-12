@@ -369,3 +369,22 @@ sources:
       Surveyed locations for GB power plants, transmission lines and
       substations. Matching an OSM plant to an Elexon BM Unit is a record link
       made by name, not a published identifier, and is marked as such per plant.
+
+  wikidata:
+    name: Wikidata and Wikimedia Commons
+    short: "Wikidata"
+    publisher: Wikimedia Foundation
+    version: "live API"
+    url: https://www.wikidata.org/
+    licence: CC0-1.0
+    licence_url: https://creativecommons.org/publicdomain/zero/1.0/
+    attribution: "Structured data from Wikidata (CC0). Photographs from Wikimedia Commons, each under its own licence, credited to its author."
+    access: direct
+    role: input
+    provides: [plant_photograph]
+    notes: >-
+      OpenStreetMap records a wikidata id for 451 GB plants; 169 of those have a
+      photograph (property P18) on Wikimedia Commons. Wikidata's own structured
+      data is CC0, but each photograph is licensed by its photographer -- usually
+      CC BY or CC BY-SA -- so the author and licence are fetched with the image
+      and shown beside it.

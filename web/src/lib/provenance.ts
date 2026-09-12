@@ -35,7 +35,7 @@ export interface Manifest {
   built: string;
   model: Record<string, unknown>;
   validation: Record<string, unknown>;
-  warnings: string[];
+  warnings: { scope: string; text: string }[];
   sources: SourceMeta[];
   checksums: Record<string, string>;
 }

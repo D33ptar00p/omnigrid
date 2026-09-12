@@ -15,9 +15,15 @@
     </header>
 
     <nav id="views" hidden>
-      <button type="button" data-view="global" class="on">World</button>
-      <button type="button" data-view="gb">Great Britain</button>
+      <button type="button" data-view="gb" class="on">Great Britain</button>
+      <button type="button" data-view="global">World</button>
     </nav>
+
+    <aside id="opfilter" hidden>
+      <label for="operator-select">Energy provider</label>
+      <select id="operator-select"><option value="">All providers</option></select>
+      <p class="opnote"></p>
+    </aside>
 
     <div id="banner" hidden></div>
 

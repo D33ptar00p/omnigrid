@@ -23,8 +23,8 @@ const map = new maplibregl.Map({
   // OSM-derived dark vector basemap, no API key. Production swaps this for a
   // self-hosted Protomaps PMTiles archive (see the plan) -- same data, one file.
   style: "https://tiles.openfreemap.org/styles/dark",
-  center: [8, 30],
-  zoom: 1.7,
+  center: GB_CENTRE,
+  zoom: 5.1,
   maxZoom: 16,
   attributionControl: { compact: true },
 });
@@ -72,7 +72,54 @@ async function boot() {
   gbView.setVisible(map, false);
   wireInteraction(sources);
   wireGb(sources);
+  wireOperatorFilter();
   wireViewToggle();
+}
+
+/** Operator dropdown. Populated once the GB source has actually loaded. */
+function wireOperatorFilter(): void {
+  const select = document.getElementById("operator-select") as HTMLSelectElement;
+  const note = document.querySelector("#opfilter .opnote") as HTMLElement;
+  let populated = false;
+
+  const populate = () => {
+    if (populated) return;
+    const counts = gbView.operatorCounts(map);
+    if (!counts.length) return;
+    populated = true;
+    select.insertAdjacentHTML("beforeend", counts.map(([op, n]) =>
+      `<option value="${op.replace(/"/g, "&quot;")}">${escapeHtml(op)} (${n})</option>`,
+    ).join(""));
+    note.textContent =
+      `${counts.length.toLocaleString()} operators tagged in OpenStreetMap. ` +
+      "This names who runs the site, which is often not who trades its output.";
+  };
+
+  // querySourceFeatures only sees loaded tiles, so wait for the source.
+  map.on("sourcedata", (e) => {
+    if (e.sourceId === gbView.PLANT_SRC && e.isSourceLoaded) populate();
+  });
+
+  select.addEventListener("change", () => {
+    const value = select.value || null;
+    gbView.filterByOperator(map, value);
+    if (value) {
+      const fs = map.querySourceFeatures(gbView.PLANT_SRC)
+        .filter((f) => f.properties?._operator === value);
+      const mw = fs.reduce((a, f) => a + (Number(f.properties?._mw) || 0), 0);
+      note.textContent = `${fs.length} plant${fs.length === 1 ? "" : "s"}` +
+        (mw > 0 ? ` · ${power(mw)} tagged capacity` : "");
+    } else {
+      populated = false;
+      note.textContent = "";
+      populate();
+    }
+  });
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
 function wireViewToggle(): void {
@@ -83,7 +130,7 @@ function wireViewToggle(): void {
     if (!btn) return;
     setView(btn.dataset.view as View);
   });
-  setView("global");
+  setView("gb");
 }
 
 function setView(next: View): void {
@@ -102,11 +149,17 @@ function setView(next: View): void {
   });
   document.getElementById("legend")!.hidden = false;
   (document.getElementById("legend-gb") as HTMLElement).hidden = global;
+  (document.getElementById("opfilter") as HTMLElement).hidden = global;
+  renderBannerFor(next);
   (document.getElementById("view-note") as HTMLElement).textContent = global
     ? "Every power source on Earth, from open data."
     : "Great Britain: metered output on the real distribution network.";
 
-  if (!global) map.flyTo({ center: GB_CENTRE, zoom: 5.1, duration: 900 });
+  if (!global && map.getZoom() < 4) {
+    map.flyTo({ center: GB_CENTRE, zoom: 5.1, duration: 900 });
+  } else if (global && map.getZoom() > 4) {
+    map.flyTo({ center: [8, 30], zoom: 1.7, duration: 900 });
+  }
 }
 
 /** GB interactions: plants and the real distribution regions. */
@@ -264,10 +317,20 @@ function applyFilter() {
 }
 
 /** A degraded build must say so on the map, not only in the logs. */
+let allWarnings: { scope: string; text: string }[] = [];
+
 function renderBanner(manifest: Manifest) {
-  const warnings = manifest.warnings;
-  if (!warnings.length) return;
+  allWarnings = manifest.warnings ?? [];
+  renderBannerFor(view);
+}
+
+/** Show only the caveats that apply to the view being looked at. */
+function renderBannerFor(current: View) {
+  const scope = current === "gb" ? "gb" : "world";
+  const warnings = allWarnings.filter((w) => w.scope === scope || w.scope === "all")
+    .map((w) => w.text);
   const b = document.getElementById("banner") as HTMLElement;
+  if (!warnings.length) { b.hidden = true; return; }
 
   // Every caveat stays reachable, but stacking eleven of them over the map made
   // the map unusable and the caveats unread. Lead with the one that changes what

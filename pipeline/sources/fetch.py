@@ -77,6 +77,7 @@ QUERY_SOURCES = {
     "elexon_b1610": "b1610.json",
     "neso_dno_areas": "dno_areas.geojson",
     "osm_gb_power": "plants.json",
+    "wikidata": "images.json",
 }
 
 

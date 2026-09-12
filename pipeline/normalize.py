@@ -39,7 +39,12 @@ class BuildReport:
     capacity_gw: float = 0.0
     skipped: dict[str, int] = field(default_factory=dict)
     gb: dict[str, object] = field(default_factory=dict)
-    warnings: list[str] = field(default_factory=list)
+    #: Caveats, each tagged with the view it concerns, so the banner can show
+    #: only what is true of what you are currently looking at.
+    warnings: list[dict[str, str]] = field(default_factory=list)
+
+    def warn(self, scope: str, text: str) -> None:
+        self.warnings.append({"scope": scope, "text": " ".join(text.split())})
     degraded: bool = False
 
 
@@ -62,10 +67,13 @@ def load_assets(reg: Registry, bm: mf.BuildManifest, report: BuildReport) -> lis
         if not allow_degraded:
             raise BuildFailed(str(e)) from None
         report.degraded = True
-        report.warnings.append(
-            "DEGRADED BUILD: Global Energy Monitor data not vendored. Falling back to "
-            "WRI GPPD v1.3.0 (unmaintained since 2021, ~35k plants instead of ~182k). "
-            "The UI must show this."
+        report.warn(
+            "world",
+            "DEGRADED BUILD: Global Energy Monitor data not vendored. The World tab "
+            "falls back to WRI GPPD v1.3.0 (unmaintained since 2021, ~35k plants "
+            "instead of ~182k). GEM's download is behind a name/email form, so it "
+            "cannot be fetched automatically: drop the .xlsx into data/raw/gem/ and "
+            "rebuild. This does not affect the Great Britain view.",
         )
     else:
         raise NotImplementedError("GEM reader lands in the next step")
@@ -123,6 +131,8 @@ def run(dist: Path = DIST) -> BuildReport:
     for sid in ("elexon_bmu", "elexon_b1610", "neso_dno_areas", "osm_gb_power"):
         got = fetch(reg[sid])
         bm.record_input(sid, got.path)
+    if (RAW / "wikidata" / "images.json").exists():
+        bm.record_input("wikidata", RAW / "wikidata" / "images.json")
     settlement_date, period = gb_src.recent_settlement_period()
     gb_report = gb_build.build(RAW, dist / "gb",
                                settlement=f"{settlement_date} period {period}")
@@ -134,10 +144,12 @@ def run(dist: Path = DIST) -> BuildReport:
         "interconnectors": gb_report.interconnectors,
         "regions": gb_report.regions,
         "matched": gb_report.matched,
+        "with_image": gb_report.with_image,
         "metered_gw": round(gb_report.metered_gw, 1),
         "settlement": gb_report.settlement,
     }
-    report.warnings.extend(gb_report.notes)
+    for note in gb_report.notes:
+        report.warn("gb", note)
 
     cited = collect_source_ids(assets) | bm.used
     if problems := mf.check(reg, cited):
@@ -186,7 +198,8 @@ if __name__ == "__main__":
         print(f"  {g['units_transmission']} transmission units · "
               f"{g['units_embedded']} embedded · {g['interconnectors']} interconnectors")
         print(f"  {g['regions']} DNO regions · {g['matched']} OSM↔Elexon name matches")
+        print(f"  {g['with_image']} plants with a photograph")
         print(f"  metered output {g['metered_gw']} GW ({g['settlement']})")
     for w in r.warnings:
-        print(f"\n!! {w}")
+        print(f"\n!! [{w['scope']}] {w['text']}")
     print(f"\nwrote data/dist/  ({sum(p.stat().st_size for p in DIST.iterdir())/1e6:.1f} MB)")

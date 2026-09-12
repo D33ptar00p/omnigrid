@@ -67,6 +67,9 @@ class Plant:
     #: NOT a claim that the plant supplies that area.
     located_in: str | None = None
     located_in_code: str | None = None
+    #: Photograph from Wikimedia Commons, with its own author and licence.
+    image: dict[str, str | None] | None = None
+    wikidata: str | None = None
     #: True for plants outside every GB DNO area: Northern Ireland, the Isle of
     #: Man and the Channel Islands are not on the GB distribution network.
     off_gb_network: bool = False
@@ -85,6 +88,10 @@ class Plant:
             out["located_in"] = self.located_in
             out["located_in_code"] = self.located_in_code
         out["off_gb_network"] = self.off_gb_network
+        if self.image:
+            out["image"] = self.image
+        if self.wikidata:
+            out["wikidata"] = self.wikidata
         return out
 
 
@@ -153,8 +160,10 @@ def read_osm_plants(path: Path) -> tuple[list[Plant], dict[str, int]]:
 
         capacity = parse_power_mw(tags.get("plant:output:electricity"))
         operator = (tags.get("operator") or "").strip()
+        qid = (tags.get("wikidata") or "").strip()
 
         plants.append(Plant(
+            wikidata=qid if qid.startswith("Q") else None,
             id=f"osm:{el['type']}/{el['id']}",
             name=(tags.get("name") or "").strip() or f"Unnamed {source} plant",
             lat=round(float(lat), 6), lon=round(float(lon), 6),
@@ -299,6 +308,7 @@ class GBReport:
     interconnectors: int = 0
     matched: int = 0
     off_network: int = 0
+    with_image: int = 0
     metered_gw: float = 0.0
     settlement: str = ""
     regions: int = 0
@@ -315,10 +325,18 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
     dist.mkdir(parents=True, exist_ok=True)
     report = GBReport(settlement=settlement)
 
+    from pipeline.sources.wikidata import load_cache
+
     units, unit_skipped = read_units(raw / "elexon_bmu" / "bmunits.json")
     metered = read_metered(raw / "elexon_b1610" / "b1610.json")
     regions = read_regions(raw / "neso_dno_areas" / "dno_areas.geojson")
     plants, plant_skipped = read_osm_plants(raw / "osm_gb_power" / "plants.json")
+
+    images = load_cache(raw / "wikidata" / "images.json")
+    for p in plants:
+        if p.wikidata and (img := images.get(p.wikidata)):
+            p.image = img.to_json()
+    report.with_image = sum(1 for p in plants if p.image)
 
     report.matched = match_units(plants, units)
     report.off_network = locate_plants(plants, regions)
@@ -340,6 +358,7 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
             "geometry": {"type": "Point", "coordinates": [p.lon, p.lat]},
             "properties": {
                 **p.to_json(),
+                "_operator": p.operator.value if p.operator else "",
                 "_fuel": p.fuel.value.value,
                 "_mw": p.capacity_mw.value if p.capacity_mw else 0,
             },

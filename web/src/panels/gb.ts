@@ -36,8 +36,22 @@ export function showPlant(props: Record<string, unknown>, sources: Sources): voi
   const matched = props.matched_unit as string | undefined;
   const basis = props.match_basis as string | undefined;
 
+  const image = props.image as Record<string, string | null> | undefined;
+
   el.innerHTML = `
     <button class="close" type="button" aria-label="Close">×</button>
+    ${image?.thumb ? `
+      <figure class="plant-photo">
+        <img src="${image.thumb}" alt="${esc(String(props.name ?? "Power station"))}"
+             loading="lazy"
+             onerror="this.closest('figure').remove()">
+        <figcaption>
+          ${image.artist ? esc(image.artist) : "Unknown author"}
+          ${image.licence ? ` · ${esc(image.licence)}` : ""}
+          ${image.credit_url ? ` · <a href="${image.credit_url}" target="_blank"
+             rel="noopener">Commons</a>` : ""}
+        </figcaption>
+      </figure>` : ""}
     <div class="p-fuel" style="color:${FUEL_COLOR[fuel]}">
       <span style="width:9px;height:9px;border-radius:50%;background:${FUEL_COLOR[fuel]}"></span>
       ${FUEL_LABEL[fuel]}
@@ -130,7 +144,7 @@ export function showRegion(props: RegionProps, sources: Sources): void {
 
     <div class="p-note">
       This region's boundary is published by NESO, and Elexon publishes which
-      units feed it. Both are facts, not estimates.
+      units feed it.
       ${undeclared > 0 ? `Elexon declares no fuel type for ${power(undeclared)}
       of this capacity; it is shown as undeclared rather than guessed.` : ""}
       <br><br>
