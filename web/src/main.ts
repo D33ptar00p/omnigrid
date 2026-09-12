@@ -37,7 +37,10 @@ if (import.meta.env.DEV) (window as unknown as { __map: maplibregl.Map }).__map 
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 
-const hidden = new Set<Fuel>();
+/** Clicking a fuel isolates it. Clicking it again, or clicking another, moves
+ *  the selection. Selecting is what people reach for; excluding is not. */
+let selectedFuel: Fuel | null = null;
+let selectedOperator: string | null = null;
 
 async function boot() {
   const manifest: Manifest = await fetch("/data/manifest.json").then((r) => r.json());
@@ -107,7 +110,8 @@ function wireOperatorFilter(): void {
 
   select.addEventListener("change", () => {
     const value = select.value || null;
-    gbView.filterByOperator(map, value);
+    selectedOperator = value;
+    applyFilter();
     if (value) {
       const fs = map.querySourceFeatures(gbView.PLANT_SRC)
         .filter((f) => f.properties?._operator === value);
@@ -131,6 +135,7 @@ function escapeHtml(s: string): string {
 function wireLegendToggle(): void {
   const toggle = document.getElementById("legend-toggle") as HTMLButtonElement;
   const legend = document.getElementById("legend") as HTMLElement;
+  applyFilter();
   toggle.addEventListener("click", () => {
     legend.hidden = !legend.hidden;
     toggle.textContent = legend.hidden ? "Legend" : "Hide legend";
@@ -324,17 +329,40 @@ function renderLegend() {
     const li = (e.target as HTMLElement).closest("li");
     if (!li) return;
     const fuel = li.dataset.fuel as Fuel;
-    hidden.has(fuel) ? hidden.delete(fuel) : hidden.add(fuel);
-    li.classList.toggle("off", hidden.has(fuel));
+    selectedFuel = selectedFuel === fuel ? null : fuel;
+
+    for (const item of ul.querySelectorAll("li")) {
+      const f = (item as HTMLElement).dataset.fuel;
+      item.classList.toggle("on", selectedFuel === f);
+      item.classList.toggle("off", selectedFuel !== null && selectedFuel !== f);
+    }
     applyFilter();
   });
 }
 
+/**
+ * Apply the fuel and operator selections together.
+ *
+ * Both used to call setFilter on the same layer, so each silently wiped the
+ * other. They are combined here so the two controls compose.
+ */
 function applyFilter() {
-  if (!map.getLayer(LAYER)) return;
-  map.setFilter(LAYER, hidden.size
-    ? ["!", ["in", ["get", "_fuel"], ["literal", [...hidden]]]]
-    : null);
+  const clauses: unknown[] = [];
+  if (selectedFuel) clauses.push(["==", ["get", "_fuel"], selectedFuel]);
+  if (selectedOperator) clauses.push(["==", ["get", "_operator"], selectedOperator]);
+
+  const expr = clauses.length
+    ? (clauses.length === 1 ? clauses[0] : ["all", ...clauses])
+    : null;
+  for (const id of [LAYER, gbView.PLANT_LAYER]) {
+    if (map.getLayer(id)) {
+      map.setFilter(id, expr as maplibregl.FilterSpecification | null);
+    }
+  }
+  const note = document.getElementById("fuel-note") as HTMLElement;
+  note.textContent = selectedFuel
+    ? `Showing ${FUEL_LABEL[selectedFuel]} only — click again to clear.`
+    : "Circle size ∝ capacity. Click a type to show only that.";
 }
 
 /** A degraded build must say so on the map, not only in the logs. */

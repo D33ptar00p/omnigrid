@@ -160,19 +160,6 @@ export async function add(map: maplibregl.Map): Promise<void> {
   });
 }
 
-/**
- * Restrict the GB plant layer to one operator.
- *
- * The operator comes from OpenStreetMap's `operator` tag, which names the site
- * operator. Elexon's lead party -- who trades the output -- is often a different
- * company, so the two lists barely overlap and this filter is deliberately the
- * OSM one: it is the operator of the physical station shown on the map.
- */
-export function filterByOperator(map: maplibregl.Map, operator: string | null): void {
-  if (!map.getLayer(PLANT_LAYER)) return;
-  map.setFilter(PLANT_LAYER, operator ? ["==", ["get", "_operator"], operator] : null);
-}
-
 /** Operators present in the data, with their plant counts, most plants first. */
 export function operatorCounts(map: maplibregl.Map): [string, number][] {
   const counts = new Map<string, number>();
