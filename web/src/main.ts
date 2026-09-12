@@ -6,6 +6,7 @@ import { FUEL_COLOR, FUEL_LABEL, FUEL_ORDER, FOSSIL, fuelColorExpression, type F
 import { power } from "./lib/format";
 import { Sources, type Manifest } from "./lib/provenance";
 import * as gbView from "./gb/view";
+import { GridTracer } from "./gb/trace";
 import * as detail from "./panels/detail";
 import * as gbPanel from "./panels/gb";
 import * as about from "./panels/about";
@@ -16,6 +17,7 @@ const LAYER = "assets-circles";
 type View = "global" | "gb";
 let view: View = "global";
 const GB_CENTRE: [number, number] = [-2.6, 54.3];
+const tracer = new GridTracer();
 
 
 const map = new maplibregl.Map({
@@ -70,9 +72,12 @@ async function boot() {
 
   await gbView.add(map);
   gbView.setVisible(map, false);
+  // Non-blocking: the map works before the adjacency (a few MB) arrives.
+  void tracer.init().catch((err) => console.error("grid tracer failed", err));
   wireInteraction(sources);
   wireGb(sources);
   wireOperatorFilter();
+  wireLegendToggle();
   wireViewToggle();
 }
 
@@ -122,6 +127,16 @@ function escapeHtml(s: string): string {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
+/** The legend is useful but was covering a third of the map; it opens on demand. */
+function wireLegendToggle(): void {
+  const toggle = document.getElementById("legend-toggle") as HTMLButtonElement;
+  const legend = document.getElementById("legend") as HTMLElement;
+  toggle.addEventListener("click", () => {
+    legend.hidden = !legend.hidden;
+    toggle.textContent = legend.hidden ? "Legend" : "Hide legend";
+  });
+}
+
 function wireViewToggle(): void {
   const bar = document.getElementById("views") as HTMLElement;
   bar.hidden = false;
@@ -147,7 +162,7 @@ function setView(next: View): void {
   document.querySelectorAll("#views button").forEach((b) => {
     b.classList.toggle("on", (b as HTMLElement).dataset.view === next);
   });
-  document.getElementById("legend")!.hidden = false;
+
   (document.getElementById("legend-gb") as HTMLElement).hidden = global;
   (document.getElementById("opfilter") as HTMLElement).hidden = global;
   renderBannerFor(next);
@@ -188,7 +203,12 @@ function wireGb(sources: Sources): void {
     const f = e.features?.[0];
     if (!f) return;
     e.preventDefault();
-    gbPanel.showPlant(revive(f.properties as Record<string, unknown>), sources);
+    const props = revive(f.properties as Record<string, unknown>);
+    gbPanel.showPlant(props, sources);
+
+    const trace = tracer.ready ? tracer.trace(String(props.id)) : null;
+    gbView.showTrace(map, trace?.hops ?? null);
+    gbPanel.setTrace(trace);
   });
 
   map.on("click", gbView.REGION_FILL, (e) => {
@@ -273,6 +293,7 @@ function wireInteraction(sources: Sources) {
     if (!map.queryRenderedFeatures(e.point, { layers }).length) {
       detail.hide();
       gbPanel.hide();
+      gbView.showTrace(map, null);
     }
   });
 

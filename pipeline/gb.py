@@ -63,6 +63,10 @@ class Plant:
     #: published by either source.
     matched_unit: str | None = None
     match_basis: str | None = None
+    #: Elexon units run by the same company. Weaker than a station match and
+    #: labelled differently: it says who operates this plant also operates these
+    #: units, not that they are the same plant.
+    operator_units: list[dict[str, object]] = field(default_factory=list)
     #: DNO licence area this plant physically sits inside. A geographic fact --
     #: NOT a claim that the plant supplies that area.
     located_in: str | None = None
@@ -84,6 +88,8 @@ class Plant:
         if self.matched_unit:
             out["matched_unit"] = self.matched_unit
             out["match_basis"] = self.match_basis
+        if self.operator_units:
+            out["operator_units"] = self.operator_units
         if self.located_in:
             out["located_in"] = self.located_in
             out["located_in_code"] = self.located_in_code
@@ -262,6 +268,68 @@ def locate_plants(plants: list[Plant], regions: list[gb_src.Region]) -> int:
     return off
 
 
+#: Company-name noise. "Drax Power Ltd" and "Drax Group PLC" are the same firm;
+#: the distinctive part is the first token that is not one of these.
+_COMPANY_NOISE = {
+    "power", "energy", "energies", "group", "ltd", "limited", "plc", "llp", "uk",
+    "gb", "holdings", "generation", "renewables", "solutions", "services", "and",
+    "the", "company", "corporation", "inc", "gmbh", "bv", "as", "a", "s",
+    "trading", "markets", "supply", "international", "operations", "investments",
+}
+
+
+def company_key(name: str) -> str | None:
+    """The distinctive leading token of a company name, or None if there isn't one.
+
+    Deliberately crude and deliberately labelled: this identifies a *firm*, not a
+    station. "Drax Power Ltd" and "Drax Group PLC" both key to "drax", which is
+    right; "National Grid" keys to "national", which is why the result is shown
+    as "same operator" and never as a station match.
+    """
+    for token in re.sub(r"[^a-z0-9 ]+", " ", name.lower()).split():
+        if token not in _COMPANY_NOISE and len(token) > 2:
+            return token
+    return None
+
+
+def link_by_operator(plants: list[Plant], units: list[gb_src.Unit],
+                     metered: dict[str, float]) -> int:
+    """Attach Elexon units run by the same company as the plant's OSM operator.
+
+    Elexon names most large stations only by BM Unit code -- Drax is T_DRAXX-1
+    through -6 -- so a station-level name match is impossible for exactly the
+    plants people most want to look at. Linking at the company level is weaker
+    but true, and the UI says which kind of link it is.
+    """
+    by_company: dict[str, list[gb_src.Unit]] = {}
+    for u in units:
+        if not u.is_generation or not u.operator or not u.capacity_mw:
+            continue
+        if key := company_key(u.operator.value):
+            by_company.setdefault(key, []).append(u)
+
+    linked = 0
+    for p in plants:
+        if not p.operator:
+            continue
+        key = company_key(p.operator.value)
+        if not key or key not in by_company:
+            continue
+        units_here = sorted(by_company[key],
+                            key=lambda u: -(u.capacity_mw.value if u.capacity_mw else 0))
+        p.operator_units = [
+            {"bm_unit": u.bm_unit,
+             "capacity_mw": round(u.capacity_mw.value, 1) if u.capacity_mw else None,
+             "fuel": u.fuel.value.value if u.fuel else None,
+             "operator": u.operator.value if u.operator else None,
+             "metered_mwh": round(metered[u.bm_unit], 2)
+             if u.bm_unit in metered else None}
+            for u in units_here[:24]
+        ]
+        linked += 1
+    return linked
+
+
 def summarise_regions(
     regions: list[gb_src.Region],
     units: list[gb_src.Unit],
@@ -309,6 +377,10 @@ class GBReport:
     matched: int = 0
     off_network: int = 0
     with_image: int = 0
+    lines: int = 0
+    substation_joins: int = 0
+    plants_wired: int = 0
+    operator_linked: int = 0
     metered_gw: float = 0.0
     settlement: str = ""
     regions: int = 0
@@ -339,6 +411,7 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
     report.with_image = sum(1 for p in plants if p.image)
 
     report.matched = match_units(plants, units)
+    report.operator_linked = link_by_operator(plants, units, metered)
     report.off_network = locate_plants(plants, regions)
     summaries = summarise_regions(regions, units, metered)
 
@@ -382,6 +455,40 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
             if u.connection is Connection.INTERCONNECTOR and u.interconnector_id
         }),
     }, separators=(",", ":")))
+
+    # --- the physical grid --------------------------------------------------
+    lines_path = raw / "osm_gb_power" / "lines.json"
+    if lines_path.exists():
+        from pipeline import grid as grid_mod
+
+        graph = grid_mod.build_graph(
+            lines_path, substations=raw / "osm_gb_power" / "substations.json")
+        conns = grid_mod.connections_bulk(
+            graph, [(p.lon, p.lat) for p in plants], radius_km=2.0)
+
+        (dist / "lines.geojson").write_text(
+            json.dumps(grid_mod.to_geojson(graph), separators=(",", ":")))
+        (dist / "adjacency.json").write_text(
+            json.dumps(grid_mod.adjacency_json(graph), separators=(",", ":")))
+        (dist / "connections.json").write_text(json.dumps(
+            {plants[i].id: c for i, c in enumerate(conns) if c},
+            separators=(",", ":")))
+
+        report.lines = len(graph.lines)
+        report.substation_joins = graph.substation_joins
+        report.plants_wired = sum(1 for c in conns if c)
+        report.notes.append(
+            f"{report.plants_wired:,} of {len(plants):,} plants sit within 2 km of a "
+            "mapped transmission line. The rest are embedded in distribution "
+            "networks that OpenStreetMap maps less completely, or are too small to "
+            "have a traced connection."
+        )
+        report.notes.append(
+            "Tracing follows surveyed wires, which is a real question with a real "
+            "answer. It is not a claim about where the electricity goes: the GB "
+            "transmission network is one connected graph, so a full trace from "
+            "almost any station reaches most of the country."
+        )
 
     report.plants = len(plants)
     report.plants_capacity_gw = sum(

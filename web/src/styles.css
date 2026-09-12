@@ -105,8 +105,17 @@ html, body {
 .banner-rest li { margin-bottom: 6px; }
 
 /* --- legend --------------------------------------------------------------- */
+#legend-toggle {
+  position: absolute; left: 16px; bottom: 16px; z-index: 6;
+  background: var(--panel); border: 1px solid var(--line); color: var(--ink-dim);
+  border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 12px;
+  cursor: pointer; backdrop-filter: blur(10px);
+}
+#legend-toggle:hover { color: var(--ink); border-color: #35455c; }
+
 #legend {
-  position: absolute; left: 16px; bottom: 16px; z-index: 5;
+  position: absolute; left: 16px; bottom: 58px; z-index: 5;
+  max-height: calc(100vh - 240px); overflow-y: auto;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 12px 14px; backdrop-filter: blur(10px); min-width: 168px;
 }
@@ -249,6 +258,52 @@ html, body {
 }
 #panel .p-warn p { margin: 0 0 6px; }
 #panel .p-warn p:last-child { margin-bottom: 0; }
+
+.unitlist { list-style: none; margin: 4px 0 0; padding: 0; }
+.unitlist li {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
+  align-items: baseline; padding: 3px 0; font-size: 12px;
+  border-bottom: 1px solid #1c2433;
+}
+.unitlist .mono { font-size: 11.5px; color: var(--ink-dim); }
+.u-cap { color: var(--ink); font-variant-numeric: tabular-nums; }
+.u-out {
+  min-width: 74px; text-align: right; font-size: 11px;
+  color: var(--ink-faint); font-variant-numeric: tabular-nums;
+}
+.u-out.on { color: #7fd4a8; font-weight: 550; }
+.u-more { margin: 6px 0 0; font-size: 11px; color: var(--ink-faint); }
+
+.trace-box {
+  margin-top: 16px; padding: 12px 14px; border-radius: 8px;
+  background: #17202e; border: 1px solid #27354a;
+}
+.trace-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-dim); margin-bottom: 10px;
+}
+.trace-stats {
+  display: grid; grid-template-columns: auto 1fr; gap: 16px; margin-bottom: 10px;
+}
+.trace-num {
+  font-size: 21px; font-weight: 600; color: #cdd9ea;
+  font-variant-numeric: tabular-nums;
+}
+.trace-cap { font-size: 10.5px; color: var(--ink-faint); line-height: 1.35; }
+.hopbar {
+  display: flex; height: 7px; border-radius: 4px; overflow: hidden; gap: 1px;
+}
+.hopbar span {
+  display: block;
+  background: linear-gradient(90deg, #ffe07a, #8fe3c8, #56a8c6, #3f6f9e);
+  background-attachment: fixed;
+}
+.hopends {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: var(--ink-faint); margin: 3px 0 8px;
+}
+.trace-box p { margin: 0; font-size: 11px; color: var(--ink-faint); line-height: 1.5; }
 
 .shed-box {
   margin-top: 18px; padding: 12px 14px; border-radius: 8px;

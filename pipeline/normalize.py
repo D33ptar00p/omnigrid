@@ -145,6 +145,9 @@ def run(dist: Path = DIST) -> BuildReport:
         "regions": gb_report.regions,
         "matched": gb_report.matched,
         "with_image": gb_report.with_image,
+        "lines": gb_report.lines,
+        "plants_wired": gb_report.plants_wired,
+        "operator_linked": gb_report.operator_linked,
         "metered_gw": round(gb_report.metered_gw, 1),
         "settlement": gb_report.settlement,
     }
@@ -199,6 +202,9 @@ if __name__ == "__main__":
               f"{g['units_embedded']} embedded · {g['interconnectors']} interconnectors")
         print(f"  {g['regions']} DNO regions · {g['matched']} OSM↔Elexon name matches")
         print(f"  {g['with_image']} plants with a photograph")
+        if g.get("lines"):
+            print(f"  {g['lines']:,} transmission lines · "
+                  f"{g['plants_wired']:,} plants traced to the network")
         print(f"  metered output {g['metered_gw']} GW ({g['settlement']})")
     for w in r.warnings:
         print(f"\n!! [{w['scope']}] {w['text']}")

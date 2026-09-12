@@ -166,3 +166,64 @@ def test_matches_are_conservative_and_record_their_basis():
     for p in plants:
         if p.matched_unit:
             assert p.match_basis and "judgement" in p.match_basis
+
+
+# ---- grid tracing ----------------------------------------------------------
+
+
+@pytest.mark.skipif(not (RAW / "osm_gb_power" / "lines.json").exists(),
+                    reason="GB line data not fetched")
+def test_substations_join_the_network_into_one_grid():
+    """Shared vertices alone leave the network in fragments.
+
+    Most lines do touch another line end-to-end, so adjacency looks healthy
+    either way — but the fragments stay separate until substations join them.
+    Drax's connected component was a single line before substations were added
+    and is the great majority of GB transmission after. Component size is
+    therefore what this asserts, not adjacency count.
+    """
+    from pipeline.grid import build_graph, connections_for
+
+    lines = RAW / "osm_gb_power" / "lines.json"
+    subs = RAW / "osm_gb_power" / "substations.json"
+
+    bare = build_graph(lines)
+    joined = build_graph(lines, substations=subs)
+    assert joined.substation_joins > 500
+
+    drax = (-0.9975, 53.7357)
+    bare_roots = connections_for(bare, *drax, radius_km=3)
+    joined_roots = connections_for(joined, *drax, radius_km=3)
+    assert bare_roots and joined_roots
+
+    bare_reach = len(bare.component_of(bare_roots[0]))
+    joined_reach = len(joined.component_of(joined_roots[0]))
+    assert joined_reach > bare_reach * 100
+
+
+@pytest.mark.skipif(not (RAW / "osm_gb_power" / "lines.json").exists(),
+                    reason="GB line data not fetched")
+def test_a_large_station_reaches_most_of_the_network():
+    """The headline finding, and the reason a per-station catchment does not
+    exist: Drax is physically wired to the great majority of GB transmission."""
+    from pipeline.grid import build_graph, connections_for
+
+    graph = build_graph(RAW / "osm_gb_power" / "lines.json",
+                        substations=RAW / "osm_gb_power" / "substations.json")
+    roots = connections_for(graph, -0.9975, 53.7357, radius_km=3)
+    assert roots, "Drax should connect to mapped transmission lines"
+
+    component = graph.component_of(roots[0])
+    assert len(component) / len(graph.lines) > 0.8
+
+
+def test_company_key_identifies_a_firm_across_naming_variants():
+    """Elexon names most large stations only by BM Unit code, so station-level
+    matching is impossible for them. Company-level linking is the fallback, and
+    it must survive Ltd/PLC/Group noise."""
+    from pipeline.gb import company_key
+
+    assert company_key("Drax Power Ltd") == company_key("Drax Group PLC") == "drax"
+    assert company_key("RWE Generation UK plc") == "rwe"
+    assert company_key("TotalEnergies Gas & Power Ltd") == "totalenergies"
+    assert company_key("Power Ltd") is None

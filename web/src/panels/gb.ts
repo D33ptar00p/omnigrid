@@ -37,6 +37,7 @@ export function showPlant(props: Record<string, unknown>, sources: Sources): voi
   const basis = props.match_basis as string | undefined;
 
   const image = props.image as Record<string, string | null> | undefined;
+  const units = (props.operator_units ?? []) as OperatorUnit[];
 
   el.innerHTML = `
     <button class="close" type="button" aria-label="Close">×</button>
@@ -78,6 +79,10 @@ export function showPlant(props: Record<string, unknown>, sources: Sources): voi
         </div>
       </div>` : ""}
 
+    <div id="trace-box" class="trace-box">Tracing the grid…</div>
+
+    ${operatorUnits(props, sources)}
+
     ${matched ? `
       <div class="field">
         <div class="field-label">Elexon BM Unit</div>
@@ -87,7 +92,7 @@ export function showPlant(props: Record<string, unknown>, sources: Sources): voi
         </div>
       </div>
       <div class="p-warn"><p>${esc(basis ?? "")}</p></div>
-    ` : `
+    ` : units.length ? "" : `
       <div class="p-note">Not matched to a Balancing Mechanism Unit. Most GB
       plants are too small to be metered individually in the balancing market,
       and matching is only accepted on an exact, unique name.</div>
@@ -95,6 +100,50 @@ export function showPlant(props: Record<string, unknown>, sources: Sources): voi
 
   el.hidden = false;
   el.querySelector(".close")?.addEventListener("click", hide);
+}
+
+interface OperatorUnit {
+  bm_unit: string;
+  capacity_mw: number | null;
+  fuel: string | null;
+  operator: string | null;
+  metered_mwh: number | null;
+}
+
+/**
+ * Elexon units run by the same company.
+ *
+ * Elexon names most large stations only by BM Unit code — Drax is T_DRAXX-1
+ * through -6 — so a station-level name match is impossible for exactly the
+ * plants people most want to look at. These units are linked by operator, which
+ * is weaker, and the label says so: same company, not necessarily this station.
+ */
+function operatorUnits(props: Record<string, unknown>, sources: Sources): string {
+  const units = (props.operator_units ?? []) as OperatorUnit[];
+  if (!units.length) return "";
+
+  const rows = units.slice(0, 12).map((u) => {
+    const mw = u.metered_mwh !== null ? u.metered_mwh * 2 : null; // half-hour → MW
+    return `<li>
+      <span class="mono">${esc(u.bm_unit)}</span>
+      <span class="u-cap">${u.capacity_mw !== null ? power(u.capacity_mw) : "—"}</span>
+      <span class="u-out ${mw !== null && mw > 1 ? "on" : ""}">
+        ${mw === null ? "" : mw > 1 ? `${power(mw)} now` : "off"}
+      </span>
+    </li>`;
+  }).join("");
+
+  return `<div class="field">
+    <div class="field-label">Metered units run by this operator</div>
+    <ul class="unitlist">${rows}</ul>
+    ${units.length > 12 ? `<p class="u-more">+ ${units.length - 12} more</p>` : ""}
+    <div class="cite">
+      <span class="kind linked" title="Linked by company name, not by station. These units are run by the same operator; they are not necessarily this station.">same operator</span>
+      <span>output metered by
+        <a href="${sources.get("elexon_b1610")?.url}" target="_blank" rel="noopener">Elexon</a>
+      </span>
+    </div>
+  </div>`;
 }
 
 export function showRegion(props: RegionProps, sources: Sources): void {
@@ -154,6 +203,52 @@ export function showRegion(props: RegionProps, sources: Sources): void {
 
   el.hidden = false;
   el.querySelector(".close")?.addEventListener("click", hide);
+}
+
+import type { Trace } from "../gb/trace";
+
+/**
+ * Report what this station is physically wired to.
+ *
+ * The component figure is the honest headline: Drax reaches 92% of the GB
+ * transmission network, which is why asking "which area does Drax supply" has
+ * no answer. Saying so plainly beats drawing a boundary that implies one.
+ */
+export function setTrace(trace: Trace | null): void {
+  const box = document.getElementById("trace-box");
+  if (!box) return;
+
+  if (!trace) {
+    box.innerHTML = `<div class="trace-title">Grid connection</div>
+      <p>No mapped transmission line within 2 km. Most small embedded generators
+      connect at distribution voltage, which OpenStreetMap maps less completely.</p>`;
+    return;
+  }
+
+  const share = trace.componentSize / trace.totalLines;
+  const byHop = new Map<number, number>();
+  for (const h of trace.hops.values()) byHop.set(h, (byHop.get(h) ?? 0) + 1);
+  const maxHop = Math.max(...byHop.keys());
+
+  box.innerHTML = `
+    <div class="trace-title">Grid connection
+      <span class="kind measured" title="Traced through surveyed OpenStreetMap geometry.">surveyed</span>
+    </div>
+    <div class="trace-stats">
+      <div><div class="trace-num">${trace.roots.length}</div>
+        <div class="trace-cap">lines at the station</div></div>
+      <div><div class="trace-num">${(share * 100).toFixed(0)}%</div>
+        <div class="trace-cap">of the GB transmission network it is wired to</div></div>
+    </div>
+    <div class="hopbar">${[...Array(maxHop + 1)].map((_, h) => {
+      const n = byHop.get(h) ?? 0;
+      return `<span style="flex:${Math.max(n, 1)}" title="${n} lines ${h} hops out"></span>`;
+    }).join("")}</div>
+    <div class="hopends"><span>at the station</span><span>${maxHop} hops out</span></div>
+    <p>Highlighted lines are those physically connected, up to ${maxHop} hops.
+    This is a question of wiring, with a real answer — not a claim about where the
+    electricity ends up. The GB network is one connected graph, which is exactly
+    why no station has a catchment area of its own.</p>`;
 }
 
 export function hide(): void {

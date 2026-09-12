@@ -22,6 +22,9 @@ export const REGION_FILL = "gb-region-fill";
 export const REGION_LINE = "gb-region-line";
 export const PLANT_SRC = "gb-plants";
 export const PLANT_LAYER = "gb-plants-circles";
+export const LINE_SRC = "gb-lines";
+export const LINE_LAYER = "gb-lines";
+export const TRACE_LAYER = "gb-lines-trace";
 
 export interface RegionProps {
   code: string;
@@ -88,6 +91,48 @@ export async function add(map: maplibregl.Map): Promise<void> {
     },
   });
 
+  // The surveyed transmission network, under the plants. Dim by default: it is
+  // context until you ask a question of it.
+  map.addSource(LINE_SRC, { type: "geojson", data: "/data/gb/lines.geojson" });
+  map.addLayer({
+    id: LINE_LAYER,
+    type: "line",
+    source: LINE_SRC,
+    paint: {
+      "line-color": [
+        "step", ["coalesce", ["get", "voltage"], 0],
+        "#3d4c60", 275000, "#4e6079", 400000, "#5f7694",
+      ],
+      "line-width": [
+        "interpolate", ["linear"], ["zoom"],
+        5, ["case", [">=", ["coalesce", ["get", "voltage"], 0], 400000], 0.7, 0.4],
+        10, ["case", [">=", ["coalesce", ["get", "voltage"], 0], 400000], 2.2, 1.2],
+      ],
+      "line-opacity": 0.5,
+    },
+  });
+
+  // The traced subset, drawn on top and coloured by how many hops out it is.
+  map.addLayer({
+    id: TRACE_LAYER,
+    type: "line",
+    source: LINE_SRC,
+    filter: ["in", ["get", "i"], ["literal", []]],
+    paint: {
+      "line-color": [
+        "interpolate", ["linear"], ["coalesce", ["feature-state", "hop"], 0],
+        0, "#ffe07a", 2, "#8fe3c8", 5, "#56a8c6", 9, "#3f6f9e",
+      ],
+      "line-width": [
+        "interpolate", ["linear"], ["zoom"],
+        5, ["interpolate", ["linear"], ["coalesce", ["feature-state", "hop"], 0], 0, 2.4, 10, 0.8],
+        10, ["interpolate", ["linear"], ["coalesce", ["feature-state", "hop"], 0], 0, 6, 10, 2],
+      ],
+      "line-opacity": 0.95,
+      "line-blur": 0.3,
+    },
+  });
+
   map.addLayer({
     id: PLANT_LAYER,
     type: "circle",
@@ -138,9 +183,23 @@ export function operatorCounts(map: maplibregl.Map): [string, number][] {
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
+/** Highlight a traced set of lines, coloured by hop distance. */
+export function showTrace(map: maplibregl.Map, hops: Map<number, number> | null): void {
+  if (!map.getLayer(TRACE_LAYER)) return;
+  if (!hops || hops.size === 0) {
+    map.setFilter(TRACE_LAYER, ["in", ["get", "i"], ["literal", []]]);
+    return;
+  }
+  const ids = [...hops.keys()];
+  map.setFilter(TRACE_LAYER, ["in", ["get", "i"], ["literal", ids]]);
+  for (const [id, hop] of hops) {
+    map.setFeatureState({ source: LINE_SRC, id }, { hop });
+  }
+}
+
 export function setVisible(map: maplibregl.Map, visible: boolean): void {
   const v = visible ? "visible" : "none";
-  for (const id of [REGION_FILL, REGION_LINE, PLANT_LAYER]) {
+  for (const id of [REGION_FILL, REGION_LINE, LINE_LAYER, TRACE_LAYER, PLANT_LAYER]) {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", v);
   }
 }
