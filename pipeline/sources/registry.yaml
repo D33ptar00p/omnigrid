@@ -367,8 +367,13 @@ sources:
     provides: [plant_location, plant_footprint, transmission_line, substation]
     notes: >-
       Surveyed locations for GB power plants, transmission lines and
-      substations. Matching an OSM plant to an Elexon BM Unit is a record link
-      made by name, not a published identifier, and is marked as such per plant.
+      substations. Queried by bounding box (49N-61.5N, 11.5W-3.5E) rather than
+      by the UK admin area: the admin boundary is the land boundary, so an
+      area query silently dropped every offshore wind farm beyond territorial
+      waters, including Hornsea and Dogger Bank. The box also reaches France
+      and Ireland, whose plants are classified out downstream. Matching an OSM
+      plant to an Elexon BM Unit is a record link made by name, not a published
+      identifier, and is marked as such per plant.
 
   wikidata:
     name: Wikidata and Wikimedia Commons

@@ -138,6 +138,8 @@ def run(dist: Path = DIST) -> BuildReport:
                                settlement=f"{settlement_date} period {period}")
     report.gb = {
         "plants": gb_report.plants,
+        "gb_plants": gb_report.gb_plants,
+        "offshore_capacity_gw": round(gb_report.offshore_capacity_gw, 1),
         "plants_capacity_gw": round(gb_report.plants_capacity_gw, 1),
         "units_transmission": gb_report.units_transmission,
         "units_embedded": gb_report.units_embedded,
@@ -148,6 +150,7 @@ def run(dist: Path = DIST) -> BuildReport:
         "lines": gb_report.lines,
         "plants_wired": gb_report.plants_wired,
         "operator_linked": gb_report.operator_linked,
+        "offshore": gb_report.offshore,
         "metered_gw": round(gb_report.metered_gw, 1),
         "settlement": gb_report.settlement,
     }
@@ -197,12 +200,16 @@ if __name__ == "__main__":
     if r.gb:
         g = r.gb
         print(f"\nGreat Britain (measured):")
-        print(f"  {g['plants']:,} plants surveyed in OSM · {g['plants_capacity_gw']} GW")
+        print(f"  {g['gb_plants']:,} GB plants surveyed in OSM · "
+              f"{g['plants_capacity_gw']} GW "
+              f"(of {g['plants']:,} in bounds; the rest are on other grids)")
         print(f"  {g['units_transmission']} transmission units · "
               f"{g['units_embedded']} embedded · {g['interconnectors']} interconnectors")
         print(f"  {g['regions']} DNO regions · {g['matched']} OSM↔Elexon name matches")
         print(f"  {g['with_image']} plants with a photograph")
         if g.get("lines"):
+            print(f"  {g.get('offshore', 0)} offshore · "
+                  f"{g.get('offshore_capacity_gw', 0)} GW")
             print(f"  {g['lines']:,} transmission lines · "
                   f"{g['plants_wired']:,} plants traced to the network")
         print(f"  metered output {g['metered_gw']} GW ({g['settlement']})")

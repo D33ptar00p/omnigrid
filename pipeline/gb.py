@@ -74,6 +74,12 @@ class Plant:
     #: Photograph from Wikimedia Commons, with its own author and licence.
     image: dict[str, str | None] | None = None
     wikidata: str | None = None
+    #: Offshore: outside every DNO area (those cover onshore distribution) but
+    #: on the GB transmission system.
+    offshore: bool = False
+    #: Set when the plant is on another country's grid entirely.
+    foreign_country: str | None = None
+    other_system: str | None = None
     #: True for plants outside every GB DNO area: Northern Ireland, the Isle of
     #: Man and the Channel Islands are not on the GB distribution network.
     off_gb_network: bool = False
@@ -94,6 +100,11 @@ class Plant:
             out["located_in"] = self.located_in
             out["located_in_code"] = self.located_in_code
         out["off_gb_network"] = self.off_gb_network
+        out["offshore"] = self.offshore
+        if self.foreign_country:
+            out["foreign_country"] = self.foreign_country
+        if self.other_system:
+            out["other_system"] = self.other_system
         if self.image:
             out["image"] = self.image
         if self.wikidata:
@@ -233,15 +244,24 @@ def match_units(plants: list[Plant], units: list[gb_src.Unit]) -> int:
     return matched
 
 
-def locate_plants(plants: list[Plant], regions: list[gb_src.Region]) -> int:
-    """Record which DNO licence area each plant physically sits inside.
+def locate_plants(plants: list[Plant], regions: list[gb_src.Region],
+                  boundaries: Path | None = None) -> tuple[int, int]:
+    """Place each plant: onshore in a DNO area, offshore, or on another system.
 
-    This is geography, not power flow: "located in South Wales" says where the
-    station is, not who it supplies. It also gives an honest filter -- Northern
-    Ireland is on the all-island Irish system, and the Isle of Man and Channel
-    Islands are separate again, so a plant outside every GB DNO area is not on
-    the GB distribution network and is marked as such rather than quietly shown
-    as if it were.
+    Three outcomes, and the distinction matters because the naive version got it
+    wrong twice. "Located in South Wales" is geography, not power flow -- it says
+    where the station is, not who it supplies.
+
+      * inside a DNO licence area -> onshore GB
+      * on land but outside every DNO area -> Northern Ireland (all-island Irish
+        system), the Isle of Man, or the Channel Islands: real stations, but not
+        on the GB grid
+      * not on land at all -> offshore. Offshore wind farms sit outside every DNO
+        area because those cover onshore distribution, yet they are firmly on the
+        GB transmission system. Treating "outside a DNO area" as "not GB" would
+        exile Hornsea and Dogger Bank.
+
+    Returns (off_network, offshore).
     """
     from shapely.geometry import shape
     from shapely.prepared import prep
@@ -251,7 +271,12 @@ def locate_plants(plants: list[Plant], regions: list[gb_src.Region]) -> int:
     tree = STRtree(shapes)
     prepared = [prep(g) for g in shapes]
 
-    off = 0
+    land = _land_polygons(boundaries) if boundaries else {}
+    land_shapes = list(land.values())
+    land_codes = list(land)
+    land_tree = STRtree(land_shapes) if land_shapes else None
+
+    off = offshore = 0
     for p in plants:
         point = Point(p.lon, p.lat)
         hit = None
@@ -259,13 +284,93 @@ def locate_plants(plants: list[Plant], regions: list[gb_src.Region]) -> int:
             if prepared[idx].contains(point):
                 hit = idx
                 break
-        if hit is None:
-            p.off_gb_network = True
-            off += 1
-        else:
+        if hit is not None:
             p.located_in = regions[hit].area
             p.located_in_code = regions[hit].code
-    return off
+            continue
+
+        country = _country_at(point, land_tree, land_shapes, land_codes)
+        if country is None:
+            # At sea. Attribute it to the nearest coastline, which for the North
+            # Sea farms is the right answer and is at least a stated rule.
+            nearest = _nearest_country(point, land_tree, land_shapes, land_codes)
+            if nearest == "GBR":
+                p.offshore = True
+                p.located_in = "Offshore"
+                offshore += 1
+            else:
+                p.off_gb_network = True
+                p.foreign_country = nearest
+                off += 1
+        elif country == "GBR":
+            # GBR land outside every DNO area is Northern Ireland.
+            p.off_gb_network = True
+            p.other_system = "Northern Ireland (all-island Irish system)"
+            off += 1
+        else:
+            p.off_gb_network = True
+            p.foreign_country = country
+            off += 1
+    return off, offshore
+
+
+def _land_polygons(boundaries: Path) -> dict[str, object]:
+    """Country land polygons from Natural Earth, keyed by ISO3.
+
+    Read through DuckDB's spatial extension, which is already a dependency and
+    handles the zipped shapefile without a GeoPandas stack.
+    """
+    import duckdb
+    from shapely import wkb
+    from shapely.ops import unary_union
+
+    path = str(boundaries)
+    if boundaries.suffix == ".zip":
+        path = f"/vsizip/{boundaries}/{boundaries.stem}.shp"
+
+    con = duckdb.connect()
+    con.execute("INSTALL spatial; LOAD spatial;")
+    rows = con.execute(
+        "SELECT ADM0_A3 AS iso3, ST_AsWKB(geom) AS wkb FROM st_read(?)", [path]
+    ).fetchall()
+    con.close()
+
+    by_country: dict[str, list] = {}
+    for iso3, blob in rows:
+        if not iso3 or blob is None:
+            continue
+        try:
+            by_country.setdefault(iso3, []).append(wkb.loads(bytes(blob)))
+        except Exception:
+            continue
+    return {k: (v[0] if len(v) == 1 else unary_union(v)) for k, v in by_country.items()}
+
+
+def _country_at(point, tree, shapes, codes) -> str | None:
+    """ISO3 of the country whose land contains this point, or None if at sea."""
+    if tree is None:
+        return None
+    for idx in tree.query(point):
+        if shapes[int(idx)].contains(point):
+            return codes[int(idx)]
+    return None
+
+
+def _nearest_country(point, tree, shapes, codes, max_degrees: float = 4.0) -> str | None:
+    """ISO3 of the nearest coastline.
+
+    Offshore wind farms have no country polygon of their own, so the nearest
+    coast is the rule used to attribute them. It is crude but stated, and for
+    the North Sea and Irish Sea farms it lands correctly.
+    """
+    if tree is None:
+        return None
+    best_code, best_dist = None, float("inf")
+    for idx in tree.query(point.buffer(max_degrees)):
+        d = shapes[int(idx)].distance(point)
+        if d < best_dist:
+            best_dist, best_code = d, codes[int(idx)]
+    return best_code
 
 
 #: Company-name noise. "Drax Power Ltd" and "Drax Group PLC" are the same firm;
@@ -381,6 +486,9 @@ class GBReport:
     substation_joins: int = 0
     plants_wired: int = 0
     operator_linked: int = 0
+    offshore: int = 0
+    gb_plants: int = 0
+    offshore_capacity_gw: float = 0.0
     metered_gw: float = 0.0
     settlement: str = ""
     regions: int = 0
@@ -412,7 +520,8 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
 
     report.matched = match_units(plants, units)
     report.operator_linked = link_by_operator(plants, units, metered)
-    report.off_network = locate_plants(plants, regions)
+    report.off_network, report.offshore = locate_plants(
+        plants, regions, raw / "natural_earth" / "ne_50m_admin_0_countries.zip")
     summaries = summarise_regions(regions, units, metered)
 
     # Metered output onto matched plants, so the map can show what a station is
@@ -456,6 +565,15 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
         }),
     }, separators=(",", ":")))
 
+    # GB totals exclude plants on other grids, and must be known before
+    # anything reports against them.
+    gb_plants = [p for p in plants if not p.off_gb_network]
+    report.gb_plants = len(gb_plants)
+    report.plants_capacity_gw = sum(
+        p.capacity_mw.value for p in gb_plants if p.capacity_mw) / 1000
+    report.offshore_capacity_gw = sum(
+        p.capacity_mw.value for p in plants if p.offshore and p.capacity_mw) / 1000
+
     # --- the physical grid --------------------------------------------------
     lines_path = raw / "osm_gb_power" / "lines.json"
     if lines_path.exists():
@@ -478,7 +596,7 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
         report.substation_joins = graph.substation_joins
         report.plants_wired = sum(1 for c in conns if c)
         report.notes.append(
-            f"{report.plants_wired:,} of {len(plants):,} plants sit within 2 km of a "
+            f"{report.plants_wired:,} of {report.gb_plants:,} GB plants sit within 2 km of a "
             "mapped transmission line. The rest are embedded in distribution "
             "networks that OpenStreetMap maps less completely, or are too small to "
             "have a traced connection."
@@ -491,8 +609,6 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
         )
 
     report.plants = len(plants)
-    report.plants_capacity_gw = sum(
-        p.capacity_mw.value for p in plants if p.capacity_mw) / 1000
     report.units_transmission = sum(
         1 for u in units if u.connection is Connection.TRANSMISSION)
     report.units_embedded = sum(
@@ -504,7 +620,7 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
     report.regions = len(summaries)
     report.skipped = {**unit_skipped, **plant_skipped}
     report.notes.append(
-        f"{report.matched} of {len(plants):,} OSM plants matched to an Elexon BM "
+        f"{report.matched} of {report.gb_plants:,} GB plants matched to an Elexon BM "
         "Unit by exact normalised name. Unmatched plants still show their surveyed "
         "location, fuel and capacity; they simply have no metered output attached."
     )
@@ -513,11 +629,19 @@ def build(raw: Path, dist: Path = DIST, *, settlement: str = "") -> GBReport:
         "distribution region, because they feed the GB national grid. That is "
         "physics, not missing data."
     )
+    if report.offshore:
+        report.notes.append(
+            f"{report.offshore} offshore plants ({report.offshore_capacity_gw:,.1f} GW) "
+            "sit outside every DNO licence area, because those cover onshore "
+            "distribution. They are on the GB transmission system and are counted "
+            "as GB. An earlier query missed them entirely: it used the UK land "
+            "boundary, so every wind farm beyond territorial waters fell outside it."
+        )
     if report.off_network:
         report.notes.append(
-            f"{report.off_network} surveyed plants sit outside every GB DNO area "
-            "— Northern Ireland (all-island Irish system), the Isle of Man and "
-            "the Channel Islands. They are shown dimmed and excluded from GB totals."
+            f"{report.off_network} plants in the map's bounds are on another grid "
+            "— Northern Ireland's all-island Irish system, or Ireland, France, "
+            "Belgium and Norway. They are shown dimmed and excluded from GB totals."
         )
     undeclared = sum(s.fuel_undeclared_mw for s in summaries)
     declared = sum(sum(s.fuel_mix_mw.values()) for s in summaries)

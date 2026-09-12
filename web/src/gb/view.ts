@@ -149,10 +149,11 @@ export async function add(map: maplibregl.Map): Promise<void> {
         ...Object.entries(FUEL_COLOR).flatMap(([f, c]) => [f, c]),
         FUEL_COLOR.other,
       ] as never,
-      // Plants outside every GB DNO area -- Northern Ireland, Isle of Man,
-      // Channel Islands -- are on other systems entirely. Shown, because they
-      // are real, but dimmed so they do not read as part of the GB grid.
-      "circle-opacity": ["case", ["get", "off_gb_network"], 0.28, 0.85],
+      // Plants on another grid entirely -- Northern Ireland, Ireland, France --
+      // are dimmed so they do not read as part of GB. Offshore wind is NOT
+      // dimmed: it sits outside every DNO area because those cover onshore
+      // distribution, but it is firmly on the GB transmission system.
+      "circle-opacity": ["case", ["get", "off_gb_network"], 0.22, 0.85],
       "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 6, 0, 9, 0.7],
       "circle-stroke-color": "#0b0e14",
       "circle-stroke-opacity": 0.6,

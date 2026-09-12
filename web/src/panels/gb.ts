@@ -64,10 +64,20 @@ export function showPlant(props: Record<string, unknown>, sources: Sources): voi
     ${field("Operator", get("operator"), (v: string) => esc(v), sources)}
 
     ${props.off_gb_network ? `
-      <div class="p-warn"><p>Outside every GB distribution licence area.
-      Northern Ireland is on the all-island Irish system; the Isle of Man and
-      Channel Islands are separate again. This station is real, but it is not on
-      the GB grid and is excluded from GB totals.</p></div>
+      <div class="p-warn"><p>${props.other_system
+        ? esc(String(props.other_system)) + ". Real, but not on the GB grid, and excluded from GB totals."
+        : "On " + esc(String(props.foreign_country ?? "another country")) +
+          "'s grid, not GB's. Shown because it is within the map's bounds."}</p></div>
+    ` : props.offshore ? `
+      <div class="field">
+        <div class="field-label">Connection</div>
+        <div class="field-value">Offshore</div>
+        <div class="cite">
+          <span class="kind measured" title="Position is surveyed; the offshore classification follows from it.">offshore</span>
+          <span>outside every DNO area — those cover onshore distribution —
+            but on the GB transmission system</span>
+        </div>
+      </div>
     ` : props.located_in ? `
       <div class="field">
         <div class="field-label">Located in</div>

@@ -124,12 +124,63 @@ def test_metered_total_is_a_plausible_gb_load():
 # ---- OSM plants ------------------------------------------------------------
 
 
-def test_osm_plants_have_real_coordinates_inside_gb():
+def test_osm_plants_have_coordinates_within_the_queried_bounds():
+    """The query is a bounding box, not the UK land area.
+
+    The land-area query silently dropped every offshore wind farm beyond
+    territorial waters — Hornsea, Dogger Bank, Seagreen — because they fall
+    outside the admin boundary. The bbox catches them, at the cost of also
+    catching French and Irish plants, which are classified out later.
+    """
     plants, _ = read_osm_plants(RAW / "osm_gb_power" / "plants.json")
     assert len(plants) > 2000
+    # A small tolerance: Overpass returns a way or relation whose *centre* can
+    # fall just outside the box when the feature straddles its edge.
     for p in plants:
-        assert 49 < p.lat < 61.5, f"{p.name} at {p.lat}"
-        assert -9 < p.lon < 2.5, f"{p.name} at {p.lon}"
+        assert 48.5 <= p.lat <= 62.0, f"{p.name} at {p.lat}"
+        assert -12.0 <= p.lon <= 4.0, f"{p.name} at {p.lon}"
+
+
+def test_major_offshore_wind_farms_are_present():
+    """Regression for the bug this fixed: these are among the largest generating
+    assets in GB and none of them were in the data at all."""
+    plants, _ = read_osm_plants(RAW / "osm_gb_power" / "plants.json")
+    names = " | ".join(p.name.lower() for p in plants)
+    for farm in ("hornsea", "dogger bank", "seagreen", "triton knoll",
+                 "east anglia", "greater gabbard"):
+        assert farm in names, f"{farm} missing from the plant data"
+
+
+def test_offshore_plants_count_as_gb_not_as_off_network():
+    """Offshore wind sits outside every DNO licence area, because those cover
+    onshore distribution — but it is firmly on the GB transmission system.
+    Treating 'outside a DNO area' as 'not GB' exiled 24 GW of wind."""
+    from pipeline.gb import locate_plants
+    from pipeline.sources.gb import read_regions
+
+    plants, _ = read_osm_plants(RAW / "osm_gb_power" / "plants.json")
+    regions = read_regions(RAW / "neso_dno_areas" / "dno_areas.geojson")
+    off, offshore = locate_plants(
+        plants, regions, RAW / "natural_earth" / "ne_50m_admin_0_countries.zip")
+
+    assert offshore > 20, "expected the major offshore wind farms"
+    hornsea = [p for p in plants if "hornsea" in p.name.lower()]
+    assert hornsea and all(p.offshore and not p.off_gb_network for p in hornsea)
+
+
+def test_foreign_plants_are_excluded_from_gb():
+    """The bbox reaches France and Ireland; those must not count as GB."""
+    from pipeline.gb import locate_plants
+    from pipeline.sources.gb import read_regions
+
+    plants, _ = read_osm_plants(RAW / "osm_gb_power" / "plants.json")
+    regions = read_regions(RAW / "neso_dno_areas" / "dno_areas.geojson")
+    locate_plants(plants, regions,
+                  RAW / "natural_earth" / "ne_50m_admin_0_countries.zip")
+
+    foreign = {p.foreign_country for p in plants if p.foreign_country}
+    assert {"FRA", "IRL"} <= foreign
+    assert all(p.off_gb_network for p in plants if p.foreign_country)
 
 
 def test_batteries_are_not_counted_as_generation():
