@@ -99,7 +99,12 @@ FUEL_ALIASES: dict[str, Fuel] = {
     "biomass": Fuel.BIOENERGY, "bioenergy": Fuel.BIOENERGY, "biogas": Fuel.BIOENERGY,
     "waste": Fuel.BIOENERGY, "municipal solid waste": Fuel.BIOENERGY,
     "landfill gas": Fuel.BIOENERGY, "wood": Fuel.BIOENERGY, "bagasse": Fuel.BIOENERGY,
-    "biofuel": Fuel.BIOENERGY,
+    "biofuel": Fuel.BIOENERGY, "landfill_gas": Fuel.BIOENERGY,
+    "sewage gas": Fuel.BIOENERGY, "wastewater": Fuel.BIOENERGY,
+    "sludge": Fuel.BIOENERGY,
+    # UK-specific sources that appear in OpenStreetMap.
+    "methane": Fuel.GAS, "mine gas": Fuel.GAS, "abandoned_mine_methane": Fuel.GAS,
+    "coal_gas": Fuel.COAL, "waste_heat": Fuel.OTHER, "minewater": Fuel.OTHER,
     # explicitly other -- present in sources, genuinely unclassifiable
     "other": Fuel.OTHER, "unknown": Fuel.OTHER,
 }
@@ -107,18 +112,25 @@ FUEL_ALIASES: dict[str, Fuel] = {
 #: Excluded from generation supply entirely rather than mapped to a fuel.
 #: Storage is negative-then-positive energy; counting it as generation inflates GW.
 NON_GENERATING = {"storage", "battery", "pumped storage", "pumped hydro storage",
-                  "compressed air", "flywheel"}
+                  "compressed air", "flywheel", "liquid_air", "battery storage"}
 
 
 def parse_fuel(raw: str | None) -> Fuel:
     """Map a source fuel string to the taxonomy, or raise.
 
     Raising on unknown values is the point: a silent OTHER would be invisible in
-    the UI and would poison capacity-factor calibration.
+    the UI, and a plant whose fuel we cannot read is not a plant burning
+    "other" -- it is a gap we should see and close.
+
+    OpenStreetMap records multi-fuel plants as "oil;gas" or "biomass;waste". The
+    first value is the primary source by convention, so it wins; the taxonomy
+    has one slot per plant and inventing a blend would be worse.
     """
     if raw is None or not raw.strip():
         raise UnknownFuel("empty fuel value")
     key = raw.strip().lower()
+    if ";" in key:
+        key = key.split(";", 1)[0].strip()
     if key in NON_GENERATING:
         raise UnknownFuel(f"{raw!r} is storage, not generation -- exclude it upstream")
     try:

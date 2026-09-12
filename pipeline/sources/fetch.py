@@ -69,6 +69,17 @@ def find_vendored(source: Source, raw: Path = RAW) -> Path:
     return matches[0]
 
 
+#: Sources that are API queries rather than a file at a URL. Each names the
+#: local filename the pipeline expects, so a cached copy is reused and the build
+#: does not hammer a public endpoint on every run.
+QUERY_SOURCES = {
+    "elexon_bmu": "bmunits.json",
+    "elexon_b1610": "b1610.json",
+    "neso_dno_areas": "dno_areas.geojson",
+    "osm_gb_power": "plants.json",
+}
+
+
 def fetch(source: Source, raw: Path = RAW, force: bool = False) -> Fetched:
     if source.is_blocked:
         raise RuntimeError(
@@ -78,6 +89,16 @@ def fetch(source: Source, raw: Path = RAW, force: bool = False) -> Fetched:
     if source.is_vendored:
         path = find_vendored(source, raw)
         return Fetched(source.id, path, sha256(path), from_cache=True)
+
+    if (name := QUERY_SOURCES.get(source.id)) is not None:
+        dest = raw / source.id / name
+        if dest.exists() and not force:
+            return Fetched(source.id, dest, sha256(dest), from_cache=True)
+        raise MissingVendoredInput(
+            f"\n  {source.name} has not been fetched yet.\n"
+            f"  Expected at : data/raw/{source.id}/{name}\n"
+            f"  Run         : make fetch-gb\n"
+        )
 
     if not source.download_url:
         raise RuntimeError(f"{source.id}: access is {source.access!r} but no download_url set")

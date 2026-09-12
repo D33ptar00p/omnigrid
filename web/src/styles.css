@@ -37,6 +37,50 @@ html, body {
   text-shadow: 0 1px 12px #0b0e14cc;
 }
 
+/* --- view switcher --------------------------------------------------------- */
+#views {
+  position: absolute; top: 60px; left: 16px; z-index: 6;
+  display: flex; gap: 2px; padding: 3px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 9px; backdrop-filter: blur(10px);
+}
+#views button {
+  background: none; border: 0; border-radius: 6px;
+  padding: 6px 12px; font: inherit; font-size: 12.5px;
+  color: var(--ink-dim); cursor: pointer; white-space: nowrap;
+}
+#views button:hover { color: var(--ink); }
+#views button.on { background: #24304380; color: var(--ink); font-weight: 550; }
+
+/* --- record-link provenance ------------------------------------------------ */
+.kind.linked {
+  background: #16323c; color: #7fc6d4; border: 1px solid #2b5765;
+}
+
+.mono { font-family: var(--mono); font-size: 13px; }
+
+/* --- region fuel mix ------------------------------------------------------- */
+.mixwarn {
+  margin: 0 0 6px; font-size: 11px; color: #d8b878; font-style: italic;
+}
+.mixbar {
+  display: flex; height: 9px; border-radius: 5px; overflow: hidden;
+  margin: 4px 0 10px; background: #1b2434;
+}
+.mixbar span { display: block; }
+.mixlist { list-style: none; margin: 0; padding: 0; }
+.mixlist li {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; padding: 2px 0; color: var(--ink-dim);
+}
+.mixlist b {
+  margin-left: auto; color: var(--ink); font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.mixlist .swatch {
+  width: 9px; height: 9px; border-radius: 2px; flex: none;
+}
+
 /* --- degraded-build banner ------------------------------------------------ */
 #banner {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);

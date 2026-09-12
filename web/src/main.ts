@@ -5,17 +5,18 @@ import "./styles.css";
 import { FUEL_COLOR, FUEL_LABEL, FUEL_ORDER, FOSSIL, fuelColorExpression, type Fuel } from "./lib/palette";
 import { power } from "./lib/format";
 import { Sources, type Manifest } from "./lib/provenance";
-import { ShedStore, toGeoJSON } from "./shed";
+import * as gbView from "./gb/view";
 import * as detail from "./panels/detail";
+import * as gbPanel from "./panels/gb";
 import * as about from "./panels/about";
 
 const SRC = "assets";
 const LAYER = "assets-circles";
-const SHED_SRC = "shed";
-const SHED_LAYER = "shed-fill";
 
-const sheds = new ShedStore();
-let activePlant: string | null = null;
+type View = "global" | "gb";
+let view: View = "global";
+const GB_CENTRE: [number, number] = [-2.6, 54.3];
+
 
 const map = new maplibregl.Map({
   container: "map",
@@ -41,38 +42,10 @@ async function boot() {
   const sources = new Sources(manifest);
 
   about.init(sources);
-  // Non-blocking: the map is usable before the shed index (a few MB) arrives.
-  void sheds.init().catch((e) => console.error("shed index failed", e));
   renderLegend();
   renderBanner(manifest);
 
   map.addSource(SRC, { type: "geojson", data: "/data/assets.geojson" });
-
-  // The shed sits under the plant points, so a selected plant stays visible
-  // on top of its own shed.
-  map.addSource(SHED_SRC, {
-    type: "geojson",
-    data: { type: "FeatureCollection", features: [] },
-  });
-  map.addLayer({
-    id: SHED_LAYER,
-    type: "fill",
-    source: SHED_SRC,
-    paint: {
-      "fill-color": ["coalesce", ["feature-state", "c"], "#56c6b9"],
-      // Deliberately no outline anywhere. A crisp boundary would imply a
-      // service territory that does not exist; the model produces a gradient,
-      // so the map shows a gradient.
-      "fill-opacity": [
-        "interpolate", ["linear"], ["get", "intensity"],
-        0, 0.02,
-        0.25, 0.20,
-        0.6, 0.42,
-        1, 0.62,
-      ],
-      "fill-antialias": true,
-    },
-  });
 
   map.addLayer({
     id: LAYER,
@@ -95,13 +68,117 @@ async function boot() {
     },
   });
 
+  await gbView.add(map);
+  gbView.setVisible(map, false);
   wireInteraction(sources);
+  wireGb(sources);
+  wireViewToggle();
+}
+
+function wireViewToggle(): void {
+  const bar = document.getElementById("views") as HTMLElement;
+  bar.hidden = false;
+  bar.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest("button");
+    if (!btn) return;
+    setView(btn.dataset.view as View);
+  });
+  setView("global");
+}
+
+function setView(next: View): void {
+  view = next;
+  detail.hide();
+  gbPanel.hide();
+
+  const global = next === "global";
+  for (const id of [LAYER]) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", global ? "visible" : "none");
+  }
+  gbView.setVisible(map, !global);
+
+  document.querySelectorAll("#views button").forEach((b) => {
+    b.classList.toggle("on", (b as HTMLElement).dataset.view === next);
+  });
+  document.getElementById("legend")!.hidden = false;
+  (document.getElementById("view-note") as HTMLElement).textContent = global
+    ? "Every power source on Earth, from open data."
+    : "Great Britain: metered output on the real distribution network.";
+
+  if (!global) map.flyTo({ center: GB_CENTRE, zoom: 5.1, duration: 900 });
+}
+
+/** GB interactions: plants and the real distribution regions. */
+function wireGb(sources: Sources): void {
+  let hovered: string | number | undefined;
+
+  map.on("mousemove", gbView.REGION_FILL, (e) => {
+    const f = e.features?.[0];
+    if (!f) return;
+    if (hovered !== undefined) {
+      map.setFeatureState({ source: gbView.REGION_SRC, id: hovered }, { hover: false });
+    }
+    hovered = f.id;
+    if (hovered !== undefined) {
+      map.setFeatureState({ source: gbView.REGION_SRC, id: hovered }, { hover: true });
+    }
+  });
+  map.on("mouseleave", gbView.REGION_FILL, () => {
+    if (hovered !== undefined) {
+      map.setFeatureState({ source: gbView.REGION_SRC, id: hovered }, { hover: false });
+    }
+    hovered = undefined;
+  });
+
+  map.on("click", gbView.PLANT_LAYER, (e) => {
+    const f = e.features?.[0];
+    if (!f) return;
+    e.preventDefault();
+    gbPanel.showPlant(revive(f.properties as Record<string, unknown>), sources);
+  });
+
+  map.on("click", gbView.REGION_FILL, (e) => {
+    // A plant click wins: the smaller target is the more specific intent.
+    if (map.queryRenderedFeatures(e.point, { layers: [gbView.PLANT_LAYER] }).length) return;
+    const f = e.features?.[0];
+    if (f) gbPanel.showRegion(revive(f.properties as Record<string, unknown>) as never, sources);
+  });
+
+  map.on("mousemove", gbView.PLANT_LAYER, (e) => {
+    const f = e.features?.[0];
+    if (!f) return;
+    const p = f.properties as Record<string, unknown>;
+    const fuel = (p._fuel ?? "other") as Fuel;
+    const tooltip = document.getElementById("tooltip") as HTMLElement;
+    tooltip.innerHTML = `<div class="t-name">${p.name}</div>
+      <div class="t-meta"><span style="color:${FUEL_COLOR[fuel]}">${FUEL_LABEL[fuel]}</span>
+      ${Number(p._mw) > 0 ? ` · ${power(Number(p._mw))}` : ""}</div>`;
+    tooltip.style.left = `${e.point.x}px`;
+    tooltip.style.top = `${e.point.y}px`;
+    tooltip.hidden = false;
+    map.getCanvas().style.cursor = "pointer";
+  });
+  map.on("mouseleave", gbView.PLANT_LAYER, () => {
+    (document.getElementById("tooltip") as HTMLElement).hidden = true;
+    map.getCanvas().style.cursor = "";
+  });
+}
+
+/** GeoJSON nests objects as JSON strings once they cross into MapLibre. */
+function revive(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    out[k] = typeof v === "string" && (v.startsWith("{") || v.startsWith("["))
+      ? safeParse(v) : v;
+  }
+  return out;
 }
 
 function wireInteraction(sources: Sources) {
   const tooltip = document.getElementById("tooltip") as HTMLElement;
 
   map.on("mousemove", LAYER, (e) => {
+    if (view !== "global") return;
     const f = e.features?.[0];
     if (!f) return;
     map.getCanvas().style.cursor = "pointer";
@@ -124,6 +201,7 @@ function wireInteraction(sources: Sources) {
   });
 
   map.on("click", LAYER, (e) => {
+    if (view !== "global") return;
     const f = e.features?.[0];
     if (!f) return;
     // GeoJSON properties arrive JSON-encoded when nested; revive them.
@@ -133,61 +211,24 @@ function wireInteraction(sources: Sources) {
       props[k] = typeof v === "string" && v.startsWith("{") ? safeParse(v) : v;
     }
     detail.show(props, sources);
-    void showShed(String(raw.id), (raw._fuel ?? "other") as Fuel);
   });
 
   map.on("click", (e) => {
-    if (!map.queryRenderedFeatures(e.point, { layers: [LAYER] }).length) {
+    const layers = [LAYER, gbView.PLANT_LAYER, gbView.REGION_FILL]
+      .filter((l) => map.getLayer(l));
+    if (!map.queryRenderedFeatures(e.point, { layers }).length) {
       detail.hide();
-      clearShed();
+      gbPanel.hide();
     }
   });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       detail.hide();
-      clearShed();
     }
   });
 }
 
-/** Reveal one plant's modelled supply shed. */
-async function showShed(plantId: string, fuel: Fuel): Promise<void> {
-  activePlant = plantId;
-  if (!sheds.ready) return;
-
-  const source = map.getSource(SHED_SRC) as maplibregl.GeoJSONSource | undefined;
-  if (!source) return;
-
-  try {
-    const shed = await sheds.load(plantId);
-    // A slower fetch for a plant the user has already clicked past must not
-    // overwrite the shed they are now looking at.
-    if (activePlant !== plantId) return;
-
-    if (!shed) {
-      clearShed();
-      detail.setShedSummary(null);
-      return;
-    }
-    map.setPaintProperty(SHED_LAYER, "fill-color", FUEL_COLOR[fuel]);
-    source.setData(toGeoJSON(shed));
-    detail.setShedSummary({
-      cells: shed.cells.length,
-      populationServed: shed.populationServed,
-      populationReached: shed.populationReached,
-    });
-  } catch (err) {
-    console.error("shed load failed", err);
-    clearShed();
-  }
-}
-
-function clearShed(): void {
-  activePlant = null;
-  const source = map.getSource(SHED_SRC) as maplibregl.GeoJSONSource | undefined;
-  source?.setData({ type: "FeatureCollection", features: [] });
-}
 
 function safeParse(s: string): unknown {
   try { return JSON.parse(s); } catch { return s; }

@@ -291,3 +291,81 @@ sources:
     notes: >-
       Real regulated US/CA polygons. Sanity check on shed extent only — never an
       input. HIFLD Open was deactivated 2025-08-26; mirrored via Data Rescue Project.
+
+  # ---- Great Britain: measured network and metered generation --------------
+
+  elexon_bmu:
+    name: BM Unit reference data
+    short: "Elexon"
+    publisher: Elexon
+    version: "Insights Solution API"
+    url: https://bmrs.elexon.co.uk/api-documentation/endpoint/reference/bmunits/all
+    download_url: https://data.elexon.co.uk/bmrs/api/v1/reference/bmunits/all
+    licence: elexon-bmrs
+    licence_url: https://www.elexon.co.uk/bsc/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/
+    attribution: "Contains BMRS data © Elexon Limited copyright and database right 2026."
+    access: direct
+    role: input
+    provides: [bm_unit, fuel, capacity_mw, operator, gsp_group]
+    notes: >-
+      3,071 Balancing Mechanism Units, 1,682 with generation capacity. Carries
+      gspGroupId, the published link from an embedded generator to the
+      distribution region it feeds. No API key required. Worldwide royalty-free
+      perpetual licence with a mandatory attribution string.
+
+  elexon_b1610:
+    name: Actual Generation Output Per Generation Unit (B1610)
+    short: "Elexon"
+    publisher: Elexon
+    version: "Insights Solution API"
+    url: https://bmrs.elexon.co.uk/api-documentation/endpoint/datasets/B1610
+    download_url: https://data.elexon.co.uk/bmrs/api/v1/datasets/B1610
+    licence: elexon-bmrs
+    licence_url: https://www.elexon.co.uk/bsc/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/
+    attribution: "Contains BMRS data © Elexon Limited copyright and database right 2026."
+    access: direct
+    role: input
+    provides: [metered_generation_mwh]
+    notes: >-
+      Settlement-grade metered output per generating unit, half-hourly. This is
+      measured electricity, not an estimate: it is the volume the unit is
+      actually settled on.
+
+  neso_dno_areas:
+    name: GIS Boundaries for GB DNO Licence Areas
+    short: "NESO"
+    publisher: National Energy System Operator
+    version: "20240503"
+    url: https://www.neso.energy/data-portal/gis-boundaries-gb-dno-license-areas
+    download_url: https://api.neso.energy/dataset/0e377f16-95e9-4c15-a1fc-49e06a39cfa0/resource/1c6a7dc0-1b6c-443a-bc67-5f7125649434/download/gb-dno-license-areas-20240503-as-geojson.geojson
+    licence: NESO-open-data
+    licence_url: https://www.neso.energy/data-portal/neso-open-licence
+    attribution: "GIS Boundaries for GB DNO Licence Areas, National Energy System Operator, NESO Open Data Licence."
+    access: direct
+    role: input
+    provides: [distribution_region]
+    notes: >-
+      The 14 licensed Distribution Network Operator areas, EPSG:27700. NESO
+      publishes these as approximate: originally shared by Western Power
+      Distribution, somewhat outdated, a good indication of geography rather
+      than a surveyed boundary. Their Name field (_A, _B, ...) matches Elexon's
+      gspGroupId, which is what makes the generator-to-region link published
+      fact rather than inference.
+
+  osm_gb_power:
+    name: OpenStreetMap GB power infrastructure
+    short: "OSM"
+    publisher: OpenStreetMap contributors
+    version: "live Overpass query"
+    url: https://wiki.openstreetmap.org/wiki/Power_networks
+    download_url: https://overpass-api.de/api/interpreter
+    licence: ODbL-1.0
+    licence_url: https://opendatacommons.org/licenses/odbl/1-0/
+    attribution: "© OpenStreetMap contributors, ODbL."
+    access: direct
+    role: input
+    provides: [plant_location, plant_footprint, transmission_line, substation]
+    notes: >-
+      Surveyed locations for GB power plants, transmission lines and
+      substations. Matching an OSM plant to an Elexon BM Unit is a record link
+      made by name, not a published identifier, and is marked as such per plant.

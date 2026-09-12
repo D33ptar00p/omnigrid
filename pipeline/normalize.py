@@ -13,16 +13,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pipeline import manifest as mf
-from pipeline.provenance import collect_source_ids, derived
-from pipeline.model import demand as demand_mod, shed as shed_mod, supply
+from pipeline.provenance import collect_source_ids
 from pipeline.schema import Asset, Fuel
-from pipeline.pack import sheds as shed_packer
-from pipeline.sources import ember, regions, wri
+from pipeline import gb as gb_build
+from pipeline.sources import gb as gb_src, wri
 from pipeline.sources.fetch import MissingVendoredInput, fetch
 from pipeline.sources.registry import Registry, load
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "data" / "dist"
+RAW = ROOT / "data" / "raw"
 
 
 class BuildFailed(Exception):
@@ -38,12 +38,10 @@ class BuildReport:
     by_fuel: dict[str, int] = field(default_factory=dict)
     capacity_gw: float = 0.0
     skipped: dict[str, int] = field(default_factory=dict)
+    gb: dict[str, object] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     degraded: bool = False
-    generation_twh: float = 0.0
-    shed: dict[str, object] = field(default_factory=dict)
-    calibration: dict[str, object] = field(default_factory=dict)
-    by_region: dict[str, int] = field(default_factory=dict)
+
 
     def summarise(self, assets: list[Asset]) -> None:
         self.assets = len(assets)
@@ -82,135 +80,6 @@ def load_assets(reg: Registry, bm: mf.BuildManifest, report: BuildReport) -> lis
     return assets
 
 
-def enrich(assets: list[Asset], reg, bm: mf.BuildManifest, report: BuildReport) -> None:
-    """Attach the two things the map needs beyond the raw inventory: which
-    synchronous grid each asset sits in, and what it actually generates."""
-    got = fetch(reg["ember_yearly"])
-    bm.record_input("ember_yearly", got.path)
-    year = supply.WRI_REFERENCE_YEAR if report.degraded else None
-    em = ember.read(got.path, year=year)
-    cal = supply.calibrate(assets, em, year=year)
-
-    index = regions.load()
-    bm.record_use(regions.SOURCE_ID)
-
-    for a in assets:
-        region_id, approximate = index.assign(a.country, a.lat, a.lon)
-        a.extra["region"] = derived(
-            index.label(region_id), "regions.assign", regions.SOURCE_ID)
-        if approximate:
-            # Surfaced so the UI can desaturate what rests on a geographic rule
-            # rather than a real boundary.
-            a.extra["region_approximate"] = derived(
-                True, "regions.geographic_rule", regions.SOURCE_ID)
-        a.extra["region_id"] = derived(region_id, "regions.assign", regions.SOURCE_ID)
-
-        # Our calibrated estimate becomes primary; whatever the source reported
-        # is kept alongside it so the two can be compared rather than merged.
-        if (reported := a.generation_gwh) is not None:
-            a.extra["generation_reported_gwh"] = reported
-        if (est := supply.annual_generation(a, cal)) is not None:
-            a.generation_gwh = est
-            report.generation_twh += est.value / 1000
-
-        cf, defaulted = cal.factor(a.country, a.fuel.value)
-        if defaulted:
-            a.extra["capacity_factor_assumed"] = derived(
-                round(cf, 3), "supply.default_capacity_factor", "ember_yearly")
-
-    for a in assets:
-        r = str(a.extra["region"].value)
-        report.by_region[r] = report.by_region.get(r, 0) + 1
-
-    report.calibration = {
-        "year": cal.year,
-        "pairs": len(cal.cf),
-        "coverage": round(cal.coverage, 3),
-        "clamp_rate": round(cal.clamp_rate, 3),
-        "worst_divergences": [
-            {"country": c, "modelled_gwh": round(m), "reported_gwh": round(r),
-             "divergence": round(d, 3)}
-            for c, m, r, d in cal.worst_divergences(15)
-        ],
-    }
-    if cal.clamp_rate > 0.15:
-        report.warnings.append(
-            f"CAPACITY FACTORS: {cal.clamp_rate:.0%} of country/fuel pairs produced a "
-            "physically implausible capacity factor and were clamped. The capacity "
-            "inventory and reported generation disagree; figures resting on those "
-            "pairs are weak."
-        )
-
-
-def build_sheds(assets: list[Asset], reg, bm: mf.BuildManifest, report: BuildReport,
-                dist: Path, *, resolution: int) -> None:
-    """Solve the allocation and pack a shed for every plant."""
-    import numpy as np
-
-    pop = fetch(reg["kontur_pop"])
-    bm.record_input("kontur_pop", pop.path)
-    bounds = fetch(reg["natural_earth"])
-    bm.record_input("natural_earth", bounds.path)
-    em = ember.read(fetch(reg["ember_yearly"]).path,
-                    year=supply.WRI_REFERENCE_YEAR if report.degraded else None)
-
-    index = regions.load()
-    surface = demand_mod.build(pop.path, bounds.path, em, index, resolution=resolution)
-
-    lat, lon, gwh, region, ids = [], [], [], [], []
-    for a in assets:
-        if a.generation_gwh is None or a.generation_gwh.value <= 0:
-            continue
-        rid, _ = index.assign(a.country, a.lat, a.lon)
-        lat.append(a.lat); lon.append(a.lon); gwh.append(a.generation_gwh.value)
-        region.append(rid); ids.append(a.id)
-
-    model = shed_mod.run(
-        surface, np.array(lat), np.array(lon), np.array(gwh),
-        np.array(region, dtype=object),
-    )
-    stats = shed_packer.write(
-        dist / "shed", surface.cells, ids,
-        model.shares_by_plant, model.shares_by_cell, model.transport, surface.population,
-    )
-
-    report.shed = {
-        "resolution": resolution,
-        "lambda_km": model.lambda_km,
-        "cells": len(surface),
-        "plants": len(ids),
-        "regions_solved": len(model.regions),
-        "unconverged": len(model.unconverged),
-        "demand_pwh": round(surface.total_demand_gwh / 1e6, 3),
-        "unplaced_twh": round(model.total_unplaced_gwh / 1000),
-        "unplaced_fraction": round(model.total_unplaced_gwh / max(sum(gwh), 1), 4),
-        "population_conservation": round(stats.population_conservation, 4),
-        "median_shed_cells": stats.median_shed_cells,
-        "largest_shed_cells": stats.largest_shed_cells,
-        "bytes": stats.bytes_sheds + stats.bytes_cells,
-        "exporting_regions": [
-            {"region": index.label(r.region_id), "balance": round(r.balance, 2),
-             "unplaced_twh": round(r.unplaced_gwh / 1000)}
-            for r in model.exporting_regions[:8]
-        ],
-    }
-    report.warnings.extend(surface.notes)
-    report.warnings.extend(model.notes[:3])
-    report.warnings.extend(stats.notes)
-    if model.unconverged:
-        report.warnings.append(
-            f"ALLOCATION: {len(model.unconverged)} region(s) hit the iteration cap "
-            "without converging; their marginals are approximate."
-        )
-    if model.total_unplaced_gwh > 0:
-        report.warnings.append(
-            f"EXPORTS NOT MODELLED: {model.total_unplaced_gwh / 1000:,.0f} TWh "
-            f"({model.total_unplaced_gwh / max(sum(gwh), 1):.0%}) of generation could not be "
-            "placed inside its own synchronous region. It concentrates in regions that "
-            "genuinely export over HVDC links this model does not represent."
-        )
-
-
 def to_geojson(assets: list[Asset]) -> dict:
     """Points for the map. Citations ride along per feature so the detail panel can
     show, per field, which dataset said it and whether it is measured or estimated."""
@@ -236,13 +105,12 @@ def to_geojson(assets: list[Asset]) -> dict:
     }
 
 
-def run(dist: Path = DIST, *, resolution: int = 4, sheds: bool = True) -> BuildReport:
+def run(dist: Path = DIST) -> BuildReport:
     reg = load()
     bm = mf.BuildManifest()
     report = BuildReport()
 
     assets = load_assets(reg, bm, report)
-    enrich(assets, reg, bm, report)
     report.summarise(assets)
 
     # --- provenance gate: nothing ships that cannot be traced -----------------
@@ -251,19 +119,37 @@ def run(dist: Path = DIST, *, resolution: int = 4, sheds: bool = True) -> BuildR
     if problems := mf.check(reg, bm.used):
         raise BuildFailed("provenance check failed:\n  - " + "\n  - ".join(problems))
 
-    if sheds:
-        build_sheds(assets, reg, bm, report, dist, resolution=resolution)
-        cited = collect_source_ids(assets) | bm.used
-        if problems := mf.check(reg, cited):
-            raise BuildFailed("provenance check failed:\n  - " + "\n  - ".join(problems))
-        bm.record_use(*cited)
+    # --- Great Britain: measured generation on the published network --------
+    for sid in ("elexon_bmu", "elexon_b1610", "neso_dno_areas", "osm_gb_power"):
+        got = fetch(reg[sid])
+        bm.record_input(sid, got.path)
+    settlement_date, period = gb_src.recent_settlement_period()
+    gb_report = gb_build.build(RAW, dist / "gb",
+                               settlement=f"{settlement_date} period {period}")
+    report.gb = {
+        "plants": gb_report.plants,
+        "plants_capacity_gw": round(gb_report.plants_capacity_gw, 1),
+        "units_transmission": gb_report.units_transmission,
+        "units_embedded": gb_report.units_embedded,
+        "interconnectors": gb_report.interconnectors,
+        "regions": gb_report.regions,
+        "matched": gb_report.matched,
+        "metered_gw": round(gb_report.metered_gw, 1),
+        "settlement": gb_report.settlement,
+    }
+    report.warnings.extend(gb_report.notes)
+
+    cited = collect_source_ids(assets) | bm.used
+    if problems := mf.check(reg, cited):
+        raise BuildFailed("provenance check failed:\n  - " + "\n  - ".join(problems))
+    bm.record_use(*cited)
 
     dist.mkdir(parents=True, exist_ok=True)
     (dist / "assets.geojson").write_text(json.dumps(to_geojson(assets), separators=(",", ":")))
 
     bm.warnings = report.warnings
     bm.model_params = {"degraded": report.degraded}
-    bm.validation = {"calibration": report.calibration, "shed": report.shed}
+    bm.validation = {"gb": report.gb}
     bm.write(reg, dist)
     mf.write_attribution(reg, bm.used)
 
@@ -280,43 +166,27 @@ if __name__ == "__main__":
     import sys
 
     ap = argparse.ArgumentParser(description="Build the OmniGrid data payload.")
-    ap.add_argument("--resolution", type=int, default=4,
-                    help="H3 resolution for the demand surface (4 = dev loop, 6 = production)")
-    ap.add_argument("--no-sheds", action="store_true", help="skip the allocation model")
-    args = ap.parse_args()
+    ap.parse_args()
 
     try:
-        r = run(resolution=args.resolution, sheds=not args.no_sheds)
+        r = run()
     except BuildFailed as e:
         print(f"\nBUILD FAILED\n{e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n{r.assets:,} assets  ·  {r.capacity_gw:,.0f} GW  ·  "
-          f"{r.generation_twh:,.0f} TWh/yr modelled")
+    print(f"\n{r.assets:,} assets  ·  {r.capacity_gw:,.0f} GW")
     for f, n in sorted(r.by_fuel.items(), key=lambda x: -x[1]):
         print(f"  {f:12} {n:7,}")
-    c = r.calibration
-    print(f"\ncalibration {c['year']}: {c['pairs']} country/fuel pairs, "
-          f"{c['coverage']:.0%} from reported data, {c['clamp_rate']:.0%} clamped")
-    print("\ntop regions:")
-    for name, n in sorted(r.by_region.items(), key=lambda x: -x[1])[:6]:
-        print(f"  {name:34} {n:6,}")
     if r.skipped:
         print("\nskipped:", dict(r.skipped))
-    if r.shed:
-        sh = r.shed
-        print(f"\nshed model: res {sh['resolution']}, lambda {sh['lambda_km']:.0f} km, "
-              f"{sh['cells']:,} cells x {sh['plants']:,} plants, "
-              f"{sh['regions_solved']} regions")
-        print(f"  median shed {sh['median_shed_cells']} cells, largest "
-              f"{sh['largest_shed_cells']:,}, {sh['bytes']/1e6:.1f} MB")
-        print(f"  population conservation: {sh['population_conservation']:.1%} "
-              "(per-plant served, summed, over world population)")
-        if sh["exporting_regions"]:
-            print("  net exporters (output stranded in-region):")
-            for e in sh["exporting_regions"][:4]:
-                print(f"    {e['region']:28} bal {e['balance']:5.2f}  "
-                      f"{e['unplaced_twh']:,} TWh")
+    if r.gb:
+        g = r.gb
+        print(f"\nGreat Britain (measured):")
+        print(f"  {g['plants']:,} plants surveyed in OSM · {g['plants_capacity_gw']} GW")
+        print(f"  {g['units_transmission']} transmission units · "
+              f"{g['units_embedded']} embedded · {g['interconnectors']} interconnectors")
+        print(f"  {g['regions']} DNO regions · {g['matched']} OSM↔Elexon name matches")
+        print(f"  metered output {g['metered_gw']} GW ({g['settlement']})")
     for w in r.warnings:
         print(f"\n!! {w}")
     print(f"\nwrote data/dist/  ({sum(p.stat().st_size for p in DIST.iterdir())/1e6:.1f} MB)")
