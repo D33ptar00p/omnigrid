@@ -10,3 +10,6 @@ dist/
 __pycache__/
 *.pyc
 .pytest_cache/
+# GEM workbooks are vendored by hand and are large; each user fetches their own
+# via the form at globalenergymonitor.org.
+data/raw/gem/

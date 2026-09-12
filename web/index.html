@@ -19,6 +19,16 @@
       <button type="button" data-view="global">World</button>
     </nav>
 
+    <aside id="statusfilter" hidden>
+      <label for="status-select">Project status</label>
+      <select id="status-select">
+        <option value="operating" selected>Operating only</option>
+        <option value="operating+construction">Operating and under construction</option>
+        <option value="">Everything, including cancelled</option>
+      </select>
+      <p class="opnote" id="status-note"></p>
+    </aside>
+
     <aside id="opfilter" hidden>
       <label for="operator-select">Energy provider</label>
       <select id="operator-select"><option value="">All providers</option></select>

@@ -5,6 +5,7 @@ import "./styles.css";
 import { FUEL_COLOR, FUEL_LABEL, FUEL_ORDER, FOSSIL, fuelColorExpression, type Fuel } from "./lib/palette";
 import { power } from "./lib/format";
 import { Sources, type Manifest } from "./lib/provenance";
+import { AssetStore } from "./lib/assets";
 import * as gbView from "./gb/view";
 import { GridTracer } from "./gb/trace";
 import * as detail from "./panels/detail";
@@ -18,6 +19,7 @@ type View = "global" | "gb";
 let view: View = "global";
 const GB_CENTRE: [number, number] = [-2.6, 54.3];
 const tracer = new GridTracer();
+const assets = new AssetStore();
 
 
 const map = new maplibregl.Map({
@@ -41,6 +43,9 @@ map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
  *  the selection. Selecting is what people reach for; excluding is not. */
 let selectedFuel: Fuel | null = null;
 let selectedOperator: string | null = null;
+/** Default to operating. Including cancelled projects lets a 60 GW dam that was
+ *  never built dominate the map, which is worse than incomplete. */
+let selectedStatus: string[] | null = ["operating"];
 
 async function boot() {
   const manifest: Manifest = await fetch("/data/manifest.json").then((r) => r.json());
@@ -50,7 +55,7 @@ async function boot() {
   renderLegend();
   renderBanner(manifest);
 
-  map.addSource(SRC, { type: "geojson", data: "/data/assets.geojson" });
+  map.addSource(SRC, { type: "geojson", data: await assets.load() });
 
   map.addLayer({
     id: LAYER,
@@ -80,6 +85,7 @@ async function boot() {
   wireInteraction(sources);
   wireGb(sources);
   wireOperatorFilter();
+  wireStatusFilter();
   wireLegendToggle();
   wireViewToggle();
 }
@@ -126,6 +132,30 @@ function wireOperatorFilter(): void {
   });
 }
 
+/** Status filter, World tab only: the GB plant data has no status field. */
+function wireStatusFilter(): void {
+  const select = document.getElementById("status-select") as HTMLSelectElement;
+  const note = document.getElementById("status-note") as HTMLElement;
+
+  const describe = () => {
+    if (!map.getSource(SRC)) return;
+    const shown = map.querySourceFeatures(SRC).length;
+    note.textContent = selectedStatus
+      ? `${assets.count.toLocaleString()} plants tracked; showing those ${
+          selectedStatus.join(" or ")}.`
+      : `Showing all ${assets.count.toLocaleString()} tracked projects, including ` +
+        "cancelled and announced ones that were never built.";
+    void shown;
+  };
+
+  select.addEventListener("change", () => {
+    selectedStatus = select.value ? select.value.split("+") : null;
+    applyFilter();
+    describe();
+  });
+  describe();
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -170,6 +200,7 @@ function setView(next: View): void {
 
   (document.getElementById("legend-gb") as HTMLElement).hidden = global;
   (document.getElementById("opfilter") as HTMLElement).hidden = global;
+  (document.getElementById("statusfilter") as HTMLElement).hidden = !global;
   renderBannerFor(next);
   (document.getElementById("view-note") as HTMLElement).textContent = global
     ? "Every power source on Earth, from open data."
@@ -283,13 +314,13 @@ function wireInteraction(sources: Sources) {
     if (view !== "global") return;
     const f = e.features?.[0];
     if (!f) return;
-    // GeoJSON properties arrive JSON-encoded when nested; revive them.
-    const raw = f.properties as Record<string, any>;
-    const props: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(raw)) {
-      props[k] = typeof v === "string" && v.startsWith("{") ? safeParse(v) : v;
-    }
-    detail.show(props, sources);
+    const i = Number((f.properties as Record<string, unknown>).i);
+    // Detail is range-fetched, so show what the map already knows immediately
+    // and fill in the cited fields when they arrive.
+    detail.show(f.properties as Record<string, unknown>, sources);
+    void assets.detail(i).then((full) => {
+      if (full) detail.show(full as unknown as Record<string, unknown>, sources);
+    });
   });
 
   map.on("click", (e) => {
@@ -350,6 +381,9 @@ function applyFilter() {
   const clauses: unknown[] = [];
   if (selectedFuel) clauses.push(["==", ["get", "_fuel"], selectedFuel]);
   if (selectedOperator) clauses.push(["==", ["get", "_operator"], selectedOperator]);
+  if (selectedStatus) {
+    clauses.push(["in", ["get", "_status"], ["literal", selectedStatus]]);
+  }
 
   const expr = clauses.length
     ? (clauses.length === 1 ? clauses[0] : ["all", ...clauses])

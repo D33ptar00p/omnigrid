@@ -33,7 +33,8 @@ export function show(props: Record<string, unknown>, sources: Sources): void {
     return isCited(v) ? v : undefined;
   };
 
-  const fuel = (get("fuel")?.v ?? "other") as Fuel;
+  // Before the detail record arrives, only the render fields are present.
+  const fuel = (get("fuel")?.v ?? props._fuel ?? "other") as Fuel;
   const gen = get("generation_gwh");
 
   el.innerHTML = `
@@ -43,8 +44,10 @@ export function show(props: Record<string, unknown>, sources: Sources): void {
       ${FUEL_LABEL[fuel]}
     </div>
     <h2>${escapeHtml(String(props.name ?? "Unnamed"))}</h2>
-    <p class="p-country">${escapeHtml(String(props.country ?? ""))} ·
-      ${Number(props.lat).toFixed(3)}, ${Number(props.lon).toFixed(3)}</p>
+    <p class="p-country">${escapeHtml(String(props.country ?? ""))}${
+      props.lat !== undefined
+        ? ` · ${Number(props.lat).toFixed(3)}, ${Number(props.lon).toFixed(3)}`
+        : ""}</p>
 
     ${field("Capacity", get("capacity_mw"), (v: number) => power(v), sources)}
     ${field("Annual generation", gen, (v: number) => energy(v), sources)}

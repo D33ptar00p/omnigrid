@@ -14,9 +14,10 @@ from pathlib import Path
 
 from pipeline import manifest as mf
 from pipeline.provenance import collect_source_ids
+from pipeline import pack
 from pipeline.schema import Asset, Fuel
 from pipeline import gb as gb_build
-from pipeline.sources import gb as gb_src, wri
+from pipeline.sources import gb as gb_src, gem, wri
 from pipeline.sources.fetch import MissingVendoredInput, fetch
 from pipeline.sources.registry import Registry, load
 
@@ -39,6 +40,7 @@ class BuildReport:
     capacity_gw: float = 0.0
     skipped: dict[str, int] = field(default_factory=dict)
     gb: dict[str, object] = field(default_factory=dict)
+    packed: dict[str, object] = field(default_factory=dict)
     #: Caveats, each tagged with the view it concerns, so the banner can show
     #: only what is true of what you are currently looking at.
     warnings: list[dict[str, str]] = field(default_factory=list)
@@ -58,11 +60,11 @@ class BuildReport:
 
 
 def load_assets(reg: Registry, bm: mf.BuildManifest, report: BuildReport) -> list[Asset]:
-    """Primary path is GEM. Falls back to WRI + OSM when the form-gated GEM files
-    have not been vendored, and says so loudly rather than pretending."""
+    """Primary path is GEM. Falls back to WRI when the form-gated GEM workbook
+    has not been vendored, and says so loudly rather than pretending."""
     allow_degraded = os.environ.get("OMNIGRID_ALLOW_DEGRADED") == "1"
     try:
-        fetch(reg["gem_gipt"])
+        got = fetch(reg["gem_gipt"])
     except MissingVendoredInput as e:
         if not allow_degraded:
             raise BuildFailed(str(e)) from None
@@ -71,46 +73,30 @@ def load_assets(reg: Registry, bm: mf.BuildManifest, report: BuildReport) -> lis
             "world",
             "DEGRADED BUILD: Global Energy Monitor data not vendored. The World tab "
             "falls back to WRI GPPD v1.3.0 (unmaintained since 2021, ~35k plants "
-            "instead of ~182k). GEM's download is behind a name/email form, so it "
+            "instead of ~145k). GEM's download is behind a name/email form, so it "
             "cannot be fetched automatically: drop the .xlsx into data/raw/gem/ and "
             "rebuild. This does not affect the Great Britain view.",
         )
     else:
-        raise NotImplementedError("GEM reader lands in the next step")
+        bm.record_input("gem_gipt", got.path)
+        assets, skipped = gem.read(got.path)
+        _check_unmapped(skipped)
+        report.skipped |= skipped
+        return assets
 
     got = fetch(reg["wri_gppd"])
     bm.record_input("wri_gppd", got.path)
     assets, skipped = wri.read(got.path)
+    _check_unmapped(skipped)
     report.skipped |= skipped
-    for reason, n in skipped.items():
-        if reason.startswith("UNMAPPED FUEL"):
-            raise BuildFailed(f"{n} row(s) with unmapped fuel: {reason}")
     return assets
 
 
-def to_geojson(assets: list[Asset]) -> dict:
-    """Points for the map. Citations ride along per feature so the detail panel can
-    show, per field, which dataset said it and whether it is measured or estimated."""
-    return {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "id": i,
-                "geometry": {"type": "Point", "coordinates": [round(a.lon, 5), round(a.lat, 5)]},
-                "properties": {
-                    **a.to_json(),
-                    # Flat duplicates of the two fields the map style filters and
-                    # sizes on. MapLibre expressions cannot reach into the nested
-                    # Cited objects, and doing this in the browser would mean
-                    # rewriting every feature on load.
-                    "_fuel": a.fuel.value.value,
-                    "_mw": round(a.capacity_mw.value, 1) if a.capacity_mw else 0,
-                },
-            }
-            for i, a in enumerate(assets)
-        ],
-    }
+def _check_unmapped(skipped: dict[str, int]) -> None:
+    """An unmapped fuel is a gap to close, not rows to drop quietly."""
+    for reason, n in skipped.items():
+        if reason.startswith(("UNMAPPED", "unmapped")):
+            raise BuildFailed(f"{n} row(s) with an unmapped value: {reason}")
 
 
 def run(dist: Path = DIST) -> BuildReport:
@@ -163,7 +149,12 @@ def run(dist: Path = DIST) -> BuildReport:
     bm.record_use(*cited)
 
     dist.mkdir(parents=True, exist_ok=True)
-    (dist / "assets.geojson").write_text(json.dumps(to_geojson(assets), separators=(",", ":")))
+    packed = pack.write(assets, dist)
+    report.packed = {
+        "count": packed.count,
+        "points_mb": round(packed.bytes_points / 1e6, 1),
+        "detail_mb": round(packed.bytes_detail / 1e6, 1),
+    }
 
     bm.warnings = report.warnings
     bm.model_params = {"degraded": report.degraded}
@@ -193,6 +184,9 @@ if __name__ == "__main__":
         sys.exit(1)
 
     print(f"\n{r.assets:,} assets  ·  {r.capacity_gw:,.0f} GW")
+    if r.packed:
+        print(f"  packed: {r.packed['points_mb']} MB render + "
+              f"{r.packed['detail_mb']} MB detail on demand")
     for f, n in sorted(r.by_fuel.items(), key=lambda x: -x[1]):
         print(f"  {f:12} {n:7,}")
     if r.skipped:
