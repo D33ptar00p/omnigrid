@@ -11,6 +11,7 @@
  * costs only that plant's bytes.
  */
 
+import { dataUrl } from "./paths";
 import type { Cited } from "./provenance";
 
 interface PackedPoints {
@@ -40,13 +41,13 @@ export class AssetStore {
   ready = false;
   count = 0;
 
-  constructor(private base = "/data") {}
+  constructor(private base = "data") {}
 
   /** Fetch the columns and rebuild them into a GeoJSON source. */
   async load(): Promise<GeoJSON.FeatureCollection> {
     const [packed, index] = await Promise.all([
-      fetch(`${this.base}/assets.points.json`).then((r) => r.json() as Promise<PackedPoints>),
-      fetch(`${this.base}/assets.detail.idx.json`).then((r) => r.json()),
+      fetch(dataUrl(`${this.base}/assets.points.json`)).then((r) => r.json() as Promise<PackedPoints>),
+      fetch(dataUrl(`${this.base}/assets.detail.idx.json`)).then((r) => r.json()),
     ]);
     this.index = index;
     this.count = packed.count;
@@ -79,7 +80,7 @@ export class AssetStore {
     if (!entry) return null;
     const [offset, length] = entry;
 
-    const res = await fetch(`${this.base}/assets.detail.bin`, {
+    const res = await fetch(dataUrl(`${this.base}/assets.detail.bin`), {
       headers: { Range: `bytes=${offset}-${offset + length - 1}` },
     });
     if (!res.ok && res.status !== 206) return null;

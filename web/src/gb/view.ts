@@ -16,6 +16,7 @@
 
 import type maplibregl from "maplibre-gl";
 import { FUEL_COLOR, type Fuel } from "../lib/palette";
+import { dataUrl } from "../lib/paths";
 
 export const REGION_SRC = "gb-regions";
 export const REGION_FILL = "gb-region-fill";
@@ -61,11 +62,11 @@ function capacityFillExpression(): unknown[] {
 export async function add(map: maplibregl.Map): Promise<void> {
   map.addSource(REGION_SRC, {
     type: "geojson",
-    data: "/data/gb/regions.geojson",
+    data: dataUrl("data/gb/regions.geojson"),
     // Feature-state hover needs stable ids, and the source has none of its own.
     generateId: true,
   });
-  map.addSource(PLANT_SRC, { type: "geojson", data: "/data/gb/plants.geojson" });
+  map.addSource(PLANT_SRC, { type: "geojson", data: dataUrl("data/gb/plants.geojson") });
 
   // Regions get a real outline — unlike a modelled shed, these boundaries are
   // published and genuinely have edges.
@@ -93,7 +94,7 @@ export async function add(map: maplibregl.Map): Promise<void> {
 
   // The surveyed transmission network, under the plants. Dim by default: it is
   // context until you ask a question of it.
-  map.addSource(LINE_SRC, { type: "geojson", data: "/data/gb/lines.geojson" });
+  map.addSource(LINE_SRC, { type: "geojson", data: dataUrl("data/gb/lines.geojson") });
   map.addLayer({
     id: LINE_LAYER,
     type: "line",

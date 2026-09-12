@@ -1,3 +1,4 @@
+import { dataUrl } from "../lib/paths";
 /**
  * Trace the physical grid outward from a power station.
  *
@@ -56,11 +57,11 @@ export class GridTracer {
   private componentCache = new Map<number, number>();
   ready = false;
 
-  async init(base = "/data/gb"): Promise<void> {
+  async init(base = "data/gb"): Promise<void> {
     const [adj, conns, reach] = await Promise.all([
-      fetch(`${base}/adjacency.json`).then((r) => r.json()),
-      fetch(`${base}/connections.json`).then((r) => r.json()),
-      fetch(`${base}/reach.json`).then((r) => r.json()),
+      fetch(dataUrl(`${base}/adjacency.json`)).then((r) => r.json()),
+      fetch(dataUrl(`${base}/connections.json`)).then((r) => r.json()),
+      fetch(dataUrl(`${base}/reach.json`)).then((r) => r.json()),
     ]);
     this.reach = reach;
     for (const [k, v] of Object.entries(adj as Record<string, number[]>)) {

@@ -9,6 +9,7 @@ import { AssetStore } from "./lib/assets";
 import * as gbView from "./gb/view";
 import { GridTracer } from "./gb/trace";
 import { closeBottomPanels, togglePanel } from "./lib/panels";
+import { dataUrl } from "./lib/paths";
 import * as detail from "./panels/detail";
 import * as gbPanel from "./panels/gb";
 import * as about from "./panels/about";
@@ -49,7 +50,7 @@ let selectedOperator: string | null = null;
 let selectedStatus: string[] | null = ["operating"];
 
 async function boot() {
-  const manifest: Manifest = await fetch("/data/manifest.json").then((r) => r.json());
+  const manifest: Manifest = await fetch(dataUrl("data/manifest.json")).then((r) => r.json());
   const sources = new Sources(manifest);
 
   about.init(sources);
