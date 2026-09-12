@@ -8,6 +8,7 @@ import { Sources, type Manifest } from "./lib/provenance";
 import { AssetStore } from "./lib/assets";
 import * as gbView from "./gb/view";
 import { GridTracer } from "./gb/trace";
+import { closeBottomPanels, togglePanel } from "./lib/panels";
 import * as detail from "./panels/detail";
 import * as gbPanel from "./panels/gb";
 import * as about from "./panels/about";
@@ -219,15 +220,15 @@ function escapeHtml(s: string): string {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-/** The legend is useful but was covering a third of the map; it opens on demand. */
+/**
+ * The legend opens on demand — it was covering a third of the map.
+ *
+ * The label stays constant: active state is carried by the `.on` class, and a
+ * button that changes width on click makes the two-button bar jump.
+ */
 function wireLegendToggle(): void {
   const toggle = document.getElementById("legend-toggle") as HTMLButtonElement;
-  const legend = document.getElementById("legend") as HTMLElement;
-  applyFilter();
-  toggle.addEventListener("click", () => {
-    legend.hidden = !legend.hidden;
-    toggle.textContent = legend.hidden ? "Legend" : "Hide legend";
-  });
+  toggle.addEventListener("click", () => togglePanel("legend", "legend-toggle"));
 }
 
 function wireViewToggle(): void {
@@ -396,6 +397,9 @@ function wireInteraction(sources: Sources) {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       detail.hide();
+      gbPanel.hide();
+      gbView.showTrace(map, null);
+      closeBottomPanels();
     }
   });
 }

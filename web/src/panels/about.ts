@@ -3,6 +3,7 @@
  * claim a dataset the build did not use, or omit one it did.
  */
 
+import { togglePanel } from "../lib/panels";
 import type { SourceMeta, Sources } from "../lib/provenance";
 
 const panel = document.getElementById("about") as HTMLElement;
@@ -58,14 +59,8 @@ export function init(sources: Sources): void {
     </div>
     ${groups}`;
 
-  toggle.addEventListener("click", () => {
-    panel.hidden = !panel.hidden;
-    toggle.classList.toggle("on", !panel.hidden);
-  });
+  toggle.addEventListener("click", () => togglePanel("about", "about-toggle"));
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      panel.hidden = true;
-      toggle.classList.remove("on");
-    }
+    if (e.key === "Escape") panel.hidden = true;
   });
 }

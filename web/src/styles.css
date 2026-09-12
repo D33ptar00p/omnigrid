@@ -105,13 +105,19 @@ html, body {
 .banner-rest li { margin-bottom: 6px; }
 
 /* --- legend --------------------------------------------------------------- */
-#legend-toggle {
-  position: absolute; left: 16px; bottom: 16px; z-index: 6;
+#controls {
+  position: absolute; left: 16px; bottom: 16px; z-index: 7;
+  display: flex; gap: 8px;
+}
+#controls button {
   background: var(--panel); border: 1px solid var(--line); color: var(--ink-dim);
   border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 12px;
-  cursor: pointer; backdrop-filter: blur(10px);
+  cursor: pointer; backdrop-filter: blur(10px); white-space: nowrap;
 }
-#legend-toggle:hover { color: var(--ink); border-color: #35455c; }
+#controls button:hover { color: var(--ink); border-color: #35455c; }
+#controls button.on {
+  color: var(--ink); border-color: var(--accent); background: #1b2836;
+}
 
 #legend {
   position: absolute; left: 16px; bottom: 58px; z-index: 5;
@@ -355,19 +361,10 @@ html, body {
 }
 
 /* --- about / sources ------------------------------------------------------ */
-#about-toggle {
-  position: absolute; right: 16px; top: 16px; z-index: 7;
-  display: flex; align-items: center; gap: 6px;
-  background: var(--panel); border: 1px solid var(--line); color: var(--ink);
-  border-radius: 8px; padding: 8px 13px; font: inherit; font-size: 12.5px;
-  cursor: pointer; backdrop-filter: blur(10px);
-}
-#about-toggle::before { content: "◆"; color: var(--accent); font-size: 9px; }
-#about-toggle:hover { border-color: var(--accent); }
-#about-toggle.on { border-color: var(--accent); background: #1b2836; }
+
 
 #about {
-  position: absolute; right: 16px; top: 58px; z-index: 6;
+  position: absolute; left: 16px; bottom: 58px; z-index: 6;
   width: min(420px, calc(100vw - 32px)); max-height: 70vh; overflow-y: auto;
   background: var(--panel-solid); border: 1px solid var(--line);
   border-radius: 10px; padding: 16px 18px; box-shadow: 0 12px 40px #0009;
